@@ -25,12 +25,14 @@ LABEL org.opencontainers.image.source="https://github.com/RabbITCybErSeC/opencod
 # - ripgrep: fast text search, commonly used by OpenCode
 # - jq: JSON parsing for upstream release metadata
 # - make: commonly used project task runner without pulling in a full C/C++ build stack
+# - libatomic1: required by upstream Node.js binaries on slim Debian images
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     curl \
     git \
     jq \
+    libatomic1 \
     make \
     procps \
     ripgrep \
