@@ -16,11 +16,9 @@ func TestRunWithDefaults(t *testing.T) {
 		t.Fatal("expected checks")
 	}
 
-	// With default command audit enabled, the init image is required even in
-	// practical/proxy mode.
 	for _, c := range checks {
-		if c.ID == "ebpf.init-image" && c.Status != StatusPass {
-			t.Errorf("expected ebpf.init-image to pass with command audit image present, got %s", c.Status)
+		if c.ID == "ebpf.init-image" && c.Status != StatusSkip {
+			t.Errorf("expected ebpf.init-image to be skipped by default, got %s", c.Status)
 		}
 		if c.ID == "ebpf.support" && c.Status != StatusSkip {
 			t.Errorf("expected ebpf.support to be skipped with proxy backend, got %s", c.Status)

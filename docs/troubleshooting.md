@@ -19,13 +19,21 @@ Apple container is not installed or not in PATH.
 
 #### `ebpf.init-image` warn
 
-The configured strict init image is not found locally.
+The configured strict init image is not found locally. Practical proxy mode does not require an init image unless command audit is explicitly enabled.
 
 **Fix**: Pull the published init image, or build it locally from source:
 
 ```bash
 opencode-sandbox image pull --strict-init
 opencode-sandbox image build --strict-init
+```
+
+If you do not need strict eBPF or command audit, disable command audit:
+
+```yaml
+audit:
+  commands:
+    enabled: false
 ```
 
 #### `ebpf.network-name` warn
@@ -66,6 +74,8 @@ Common causes:
 - cgroup2 is not available in the Apple container VM.
 - The init image is missing or corrupted.
 - The policy bundle is malformed.
+
+If the boot log ends with `Requested init /sbin/vminitd failed (error -2)`, the init image is not bootable as an Apple container init image. Disable command audit or strict eBPF for the project and retry in practical proxy mode.
 
 ### Blocked provider traffic
 

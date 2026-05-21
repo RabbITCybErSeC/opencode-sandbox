@@ -1,31 +1,29 @@
 # Strict init image for opencode-sandbox eBPF policy daemon.
-# This image is used as --init-image for Apple container strict mode.
-# It runs inside the VM before the main OCI process starts.
-# eBPF tooling is isolated here so the normal OpenCode image stays plain.
+# Apple container custom init images must wrap the default vminitd binary.
+# The wrapper starts policy-ebpfd when runtime state is mounted, then execs
+# the real vminitd so the lightweight VM can continue normal startup.
 
 ARG GO_VERSION=1.26
+ARG VMINIT_IMAGE=ghcr.io/apple/containerization/vminit:0.31.0
 FROM golang:${GO_VERSION}-bookworm AS builder
 
-# Build the policy daemon with the current Go 1.26 patch release.
 WORKDIR /build
 COPY go.mod go.sum ./
 COPY cmd/policy-ebpfd ./cmd/policy-ebpfd
-RUN go build -o policy-ebpfd ./cmd/policy-ebpfd
+COPY cmd/vminit-wrapper ./cmd/vminit-wrapper
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o policy-ebpfd ./cmd/policy-ebpfd \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o vminit-wrapper ./cmd/vminit-wrapper
 
 # ---
 
-FROM debian:bookworm-slim
+FROM ${VMINIT_IMAGE} AS vminit
+
+# ---
+
+FROM ${VMINIT_IMAGE}
 
 LABEL org.opencontainers.image.source="https://github.com/RabbITCybErSeC/opencode-sandbox"
 
-# Install minimal runtime dependencies.
-# ca-certificates: needed if the daemon makes HTTPS requests.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy the daemon binary.
+COPY --from=vminit /sbin/vminitd /sbin/vminitd.real
 COPY --from=builder /build/policy-ebpfd /usr/local/bin/policy-ebpfd
-
-# The init image runs the policy daemon before the main OCI process starts.
-ENTRYPOINT ["/usr/local/bin/policy-ebpfd"]
+COPY --from=builder /build/vminit-wrapper /sbin/vminitd

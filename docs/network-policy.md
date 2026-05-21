@@ -159,7 +159,7 @@ Strict mode writes JSONL event logs. Practical proxy mode writes proxy block log
 
 Strict event fields include timestamp, run ID, project, backend, hook, protocol, destination IP/port, decision, reason, and matched rule when available. Events never include URLs, query strings, headers, request bodies, or secrets.
 
-Command audit events are enabled by default and written beside network events.
+Command audit events are opt-in while the custom init image path is experimental. When enabled, they are written beside network events.
 
 - **Host state**: `~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl`
 - **Project mirror** (optional): `<project>/.opencode-sandbox/command-events.jsonl`

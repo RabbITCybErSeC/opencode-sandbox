@@ -37,8 +37,8 @@ func TestDefaults(t *testing.T) {
 	if cfg.Network.ProxyPort != 18080 {
 		t.Errorf("unexpected proxy port: %d", cfg.Network.ProxyPort)
 	}
-	if !cfg.Audit.Commands.Enabled {
-		t.Error("expected command audit to be enabled by default")
+	if cfg.Audit.Commands.Enabled {
+		t.Error("expected command audit to be disabled by default")
 	}
 	if cfg.Audit.Commands.Backend != "ebpf" {
 		t.Errorf("unexpected command audit backend: %s", cfg.Audit.Commands.Backend)
@@ -93,9 +93,7 @@ func TestValidateBackendRequiresInitImage(t *testing.T) {
 
 func TestValidateCommandAudit(t *testing.T) {
 	cfg := Defaults()
-	if err := Validate(cfg); err != nil {
-		t.Errorf("expected defaults with command audit to be valid: %v", err)
-	}
+	cfg.Audit.Commands.Enabled = true
 
 	cfg.Audit.Commands.Backend = "proxy"
 	if err := Validate(cfg); err == nil {
@@ -103,12 +101,14 @@ func TestValidateCommandAudit(t *testing.T) {
 	}
 
 	cfg = Defaults()
+	cfg.Audit.Commands.Enabled = true
 	cfg.Audit.Commands.LogArgs = "redacted"
 	if err := Validate(cfg); err == nil {
 		t.Error("expected unsupported command audit logArgs to fail")
 	}
 
 	cfg = Defaults()
+	cfg.Audit.Commands.Enabled = true
 	cfg.Audit.Commands.MaxArgs = -1
 	if err := Validate(cfg); err == nil {
 		t.Error("expected negative command audit maxArgs to fail")
