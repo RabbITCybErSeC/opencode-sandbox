@@ -1,0 +1,31 @@
+# Strict init image for opencode-sandbox eBPF policy daemon.
+# This image is used as --init-image for Apple container strict mode.
+# It runs inside the VM before the main OCI process starts.
+# eBPF tooling is isolated here so the normal OpenCode image stays plain.
+
+ARG GO_VERSION=1.26
+FROM golang:${GO_VERSION}-bookworm AS builder
+
+# Build the policy daemon with the current Go 1.26 patch release.
+WORKDIR /build
+COPY go.mod go.sum ./
+COPY cmd/policy-ebpfd ./cmd/policy-ebpfd
+RUN go build -o policy-ebpfd ./cmd/policy-ebpfd
+
+# ---
+
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.source="https://github.com/RabbITCybErSeC/opencode-sandbox"
+
+# Install minimal runtime dependencies.
+# ca-certificates: needed if the daemon makes HTTPS requests.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the daemon binary.
+COPY --from=builder /build/policy-ebpfd /usr/local/bin/policy-ebpfd
+
+# The init image runs the policy daemon before the main OCI process starts.
+ENTRYPOINT ["/usr/local/bin/policy-ebpfd"]

@@ -1,0 +1,35 @@
+version: 1
+
+image:
+  name: opencode-sandbox:latest
+  autoBuild: false
+
+project:
+  target: /workspace
+  readonly: false
+
+opencode:
+  mountHostConfig: true
+  mountHostData: true
+  generatedConfig: true
+  autoupdate: false
+
+skills:
+  importedDir: .opencode-sandbox/skills
+  include:
+    - "*"
+  exclude: []
+
+network:
+  inheritGlobal: true
+  mode: practical
+  blocklist: []
+  allowlist: []
+
+resources:
+  cpus: 4
+  memory: 4g
+
+container:
+  namePrefix: opencode-sandbox
+  remove: true
