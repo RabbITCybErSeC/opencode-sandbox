@@ -366,8 +366,8 @@ func TestBuildArgvLocalhostAccessEnabled(t *testing.T) {
 	argv := BuildArgv(plan)
 	joined := strings.Join(argv, " ")
 
-	if !strings.Contains(joined, "--localhost 203.0.113.113") {
-		t.Error("expected --localhost flag")
+	if strings.Contains(joined, "--localhost") {
+		t.Error("expected no --localhost flag; host DNS is configured with `container system dns create`")
 	}
 	if !strings.Contains(joined, "OPENCODE_SANDBOX_HOST_DOMAIN=host.container.internal") {
 		t.Error("expected OPENCODE_SANDBOX_HOST_DOMAIN env var")

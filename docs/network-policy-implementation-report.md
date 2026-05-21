@@ -39,9 +39,14 @@ When `localhostAccess.enabled` is true:
 ### 5. Container Command Builder (`internal/containercmd/builder.go`)
 
 When `LocalhostAccess.Enabled` is true, appends to `container run` argv:
-- `--localhost 203.0.113.113` (the Apple container flag for host DNS)
 - `--env OPENCODE_SANDBOX_HOST_DOMAIN=host.container.internal`
 - `--env OPENCODE_SANDBOX_HOST_IP=203.0.113.113`
+
+Host DNS itself is configured outside `container run` with:
+
+```bash
+sudo container system dns create host.container.internal --localhost 203.0.113.113
+```
 
 ### 6. CLI Flag (`internal/cli/run.go`, `internal/cli/run_plan.go`)
 
@@ -75,7 +80,7 @@ localhostAccess:
 
 ### 9. Tests (`internal/containercmd/builder_test.go`, `internal/cli/init_config_test.go`)
 
-- `TestBuildArgvLocalhostAccessEnabled`: verifies `--localhost` flag and both env vars are present
+- `TestBuildArgvLocalhostAccessEnabled`: verifies no invalid `container run --localhost` flag is present and both env vars are present
 - `TestBuildArgvLocalhostAccessDisabled`: verifies no `--localhost` flag when disabled
 - `TestInitProjectCreatesConfig`: verifies generated config contains `localhostAccess:`
 
@@ -123,7 +128,7 @@ sudo container system dns create host.container.internal --localhost 203.0.113.1
 | `internal/config/defaults.go` | +5 | Default `localhostAccess` values |
 | `internal/config/load.go` | +17 | `applyLocalhostAccess()` merge function |
 | `internal/config/validate.go` | +12 | IP and domain validation |
-| `internal/containercmd/builder.go` | +6 | `--localhost` flag and env vars |
+| `internal/containercmd/builder.go` | +5 | Host access env vars |
 | `internal/containercmd/builder_test.go` | +48 | Two new test cases |
 | `internal/cli/run.go` | +13/-2 | `--allow-host-access` flag parsing and override |
 | `internal/cli/run_plan.go` | +5/-2 | `AllowHostAccess` field on `RunPlan` |
@@ -139,6 +144,6 @@ sudo container system dns create host.container.internal --localhost 203.0.113.1
 - [ ] `go build ./cmd/opencode-sandbox` succeeds
 - [ ] `opencode-sandbox init` generates config with `localhostAccess` section
 - [ ] `opencode-sandbox init --global` generates config with `localhostAccess` section
-- [ ] `opencode-sandbox run . --allow-host-access --print-command` shows `--localhost 203.0.113.113`
+- [ ] `opencode-sandbox run . --allow-host-access --print-command` shows host access env vars and no `--localhost` run flag
 - [ ] `opencode-sandbox doctor` shows `host.dns` check when `localhostAccess.enabled: true`
 - [ ] Config validation rejects invalid IP or missing domain when enabled

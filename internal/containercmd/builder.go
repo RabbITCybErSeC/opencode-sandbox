@@ -105,7 +105,6 @@ func BuildArgv(plan Plan) []string {
 	}
 
 	if cfg.Network.LocalhostAccess.Enabled {
-		argv = append(argv, "--localhost", cfg.Network.LocalhostAccess.IP)
 		argv = append(argv, "--env", fmt.Sprintf("OPENCODE_SANDBOX_HOST_DOMAIN=%s", cfg.Network.LocalhostAccess.Domain))
 		argv = append(argv, "--env", fmt.Sprintf("OPENCODE_SANDBOX_HOST_IP=%s", cfg.Network.LocalhostAccess.IP))
 	}

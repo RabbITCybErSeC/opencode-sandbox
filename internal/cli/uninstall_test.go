@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,30 @@ func TestRunUninstallRemovesGlobalArtifactsAndPreservesProjectArtifacts(t *testi
 		{"container", "builder", "delete", "--force"},
 	}
 	assertCalls(t, calls, wantCalls)
+}
+
+func TestRunUninstallExplainsProjectArtifactsArePreserved(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	setupUninstallHome(t, home)
+	createUninstallArtifacts(t, home, project)
+
+	captureUninstallCommands(t, &[][]string{}, map[string][]byte{
+		"container list --all --format json": []byte(`[]`),
+	})
+
+	output := captureStdout(t, func() {
+		if err := runUninstall(nil); err != nil {
+			t.Fatalf("runUninstall failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Project-local artifacts are intentionally preserved") {
+		t.Fatalf("expected project artifact preservation guidance, got:\n%s", output)
+	}
+	if !strings.Contains(output, ".opencode-sandbox.yaml") {
+		t.Fatalf("expected project config path in guidance, got:\n%s", output)
+	}
 }
 
 func TestRunUninstallRejectsUnknownOption(t *testing.T) {
@@ -214,4 +239,28 @@ func userConfigRoot(t *testing.T) string {
 		t.Fatalf("resolving user config dir: %v", err)
 	}
 	return configRoot
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating stdout pipe: %v", err)
+	}
+	os.Stdout = writer
+
+	fn()
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("closing stdout writer: %v", err)
+	}
+	os.Stdout = oldStdout
+
+	out, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("reading stdout: %v", err)
+	}
+	return string(out)
 }
