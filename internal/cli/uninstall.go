@@ -75,7 +75,7 @@ func runUninstall(args []string) error {
 		return err
 	}
 
-	fmt.Println("Preserved project artifacts such as .opencode-sandbox.yaml and .opencode-sandbox/.")
+	fmt.Println("Project-local artifacts are intentionally preserved: .opencode-sandbox.yaml and .opencode-sandbox/.")
 	return nil
 }
 

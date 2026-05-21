@@ -5,14 +5,13 @@ This guide gets opencode-sandbox from install to a first sandboxed OpenCode run.
 ## Prerequisites
 
 - macOS with Apple's `container` CLI installed and available on `PATH`.
-- Go installed for building the wrapper CLI.
-- Network access to pull the published OpenCode container image, or to build it locally from source.
+- `curl` and `tar` for the installer.
+- Network access to download the wrapper binary and pull the published OpenCode container image.
 
 Check the environment first:
 
 ```bash
 container system version
-go version
 ```
 
 ## 1. Install the wrapper CLI
@@ -23,7 +22,13 @@ Install from GitHub:
 curl -fsSL https://raw.githubusercontent.com/RabbITCybErSeC/opencode-sandbox/main/install.sh | bash
 ```
 
-The installer clones or updates the repo, builds the wrapper CLI, pulls the published runtime image, and prints a ready-to-add shell alias. In an interactive shell it also asks whether to pull the optional strict eBPF init image.
+The installer downloads the latest prebuilt macOS binary for your architecture, pulls the published runtime image, and prints a ready-to-add shell alias. In an interactive shell it also asks whether to pull the optional strict eBPF init image.
+
+To install a specific release instead of the latest one:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RabbITCybErSeC/opencode-sandbox/main/install.sh | OPENCODE_SANDBOX_VERSION=v0.0.2 bash
+```
 
 ```bash
 alias sopencode="$HOME/.local/bin/opencode-sandbox"
@@ -39,6 +44,7 @@ If you want a development checkout, clone the repo:
 git clone https://github.com/RabbITCybErSeC/opencode-sandbox.git
 cd opencode-sandbox
 git pull --ff-only
+go version
 ```
 
 From the repo root:
@@ -304,6 +310,14 @@ sopencode policy test example.com
 sopencode run .
 sopencode run . --dry-run
 ```
+
+Uninstall global wrapper artifacts and container resources:
+
+```bash
+sopencode uninstall
+```
+
+Uninstall intentionally preserves project-local files such as `.opencode-sandbox.yaml` and `.opencode-sandbox/`.
 
 ## Optional Shell Alias
 

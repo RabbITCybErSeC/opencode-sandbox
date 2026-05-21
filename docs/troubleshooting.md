@@ -139,7 +139,7 @@ For normal installs, prefer pulling the published image:
 opencode-sandbox image pull
 ```
 
-For local source builds, ensure the installer source checkout still exists at `~/.local/share/opencode-sandbox-src`, set `OPENCODE_SANDBOX_DIR`, or pass the source explicitly:
+For local source builds, use a development checkout and pass the source explicitly. The installer downloads a prebuilt wrapper binary and no longer creates `~/.local/share/opencode-sandbox-src`.
 
 ```bash
 opencode-sandbox image build --context /path/to/opencode-sandbox

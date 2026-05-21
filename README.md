@@ -5,7 +5,7 @@ A Go CLI wrapper that runs [OpenCode](https://opencode.ai) inside Apple's native
 ## Quickstart
 
 ```bash
-# Use install the wrapper
+# Install the prebuilt wrapper for your Mac architecture
 curl -fsSL https://raw.githubusercontent.com/RabbITCybErSeC/opencode-sandbox/main/install.sh | bash
 
 # Add the alias printed by the installer, then check your environment
@@ -178,6 +178,8 @@ opencode-sandbox image pull --strict-init
 Local source builds remain supported:
 
 ```bash
+git clone https://github.com/RabbITCybErSeC/opencode-sandbox.git
+cd opencode-sandbox
 opencode-sandbox image build
 opencode-sandbox image build --strict-init
 ```
