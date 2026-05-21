@@ -85,6 +85,7 @@ func TestPreflightContainerImagesChecksRuntimeAndInitImages(t *testing.T) {
 	defer func() { inspectRunImage = oldInspectRunImage }()
 
 	cfg := config.Defaults()
+	cfg.Audit.Commands.Enabled = true
 	plan := containercmd.Plan{
 		Image:     "runtime:test",
 		Effective: cfg,
@@ -138,9 +139,11 @@ func TestPreflightContainerImagesReportsMissingInitImage(t *testing.T) {
 		}
 		return []byte("Image not found"), errors.New("exit status 1")
 	}
+	cfg := config.Defaults()
+	cfg.Audit.Commands.Enabled = true
 	err := preflightContainerImages(containercmd.Plan{
 		Image:     "runtime:test",
-		Effective: config.Defaults(),
+		Effective: cfg,
 	})
 	if err == nil {
 		t.Fatal("expected missing init image error")

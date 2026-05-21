@@ -202,13 +202,13 @@ The selected project is mounted into the container at:
 /workspace
 ```
 
-Wrapper state, OpenCode config/data/state, network events, and command audit events stay on the host. Network events are written under:
+Wrapper state, OpenCode config/data/state, and event logs stay on the host. Network events are written under:
 
 ```text
 ~/.local/state/opencode-sandbox/runs/<run-id>/network-events.jsonl
 ```
 
-Command audit events are enabled by default and written under:
+Command audit events are opt-in while the custom init image path is experimental. When enabled, they are written under:
 
 ```text
 ~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl

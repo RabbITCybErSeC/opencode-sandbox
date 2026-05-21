@@ -49,7 +49,7 @@ func Defaults() EffectiveConfig {
 		},
 		Audit: EffectiveAudit{
 			Commands: EffectiveCommandAudit{
-				Enabled:             true,
+				Enabled:             false,
 				Backend:             "ebpf",
 				FailClosed:          false,
 				LogArgs:             "full",

@@ -96,6 +96,23 @@ func TestBuildArgvPracticalProxyEnv(t *testing.T) {
 	}
 }
 
+func TestBuildArgvDefaultPracticalProxyOmitsInitImage(t *testing.T) {
+	cfg := config.Defaults()
+	plan := Plan{
+		ProjectPath: "/tmp/project",
+		StagingDir:  "/tmp/staging",
+		Image:       "test:latest",
+		Effective:   cfg,
+	}
+
+	argv := BuildArgv(plan)
+	joined := strings.Join(argv, " ")
+
+	if strings.Contains(joined, "--init-image") {
+		t.Fatalf("default practical proxy runs should not require an init image, got:\n%s", joined)
+	}
+}
+
 func TestBuildArgvEbpfNoProxy(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Network.Mode = "strict"
@@ -169,14 +186,13 @@ func TestBuildArgvCommandAuditInitImageWithProxyNetwork(t *testing.T) {
 	}
 }
 
-func TestRequiredInitImageIncludesDefaultCommandAudit(t *testing.T) {
+func TestRequiredInitImageOmitsDefaultCommandAudit(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Network.Mode = "practical"
 	cfg.Network.Backend = "proxy"
-	cfg.Audit.Commands.Enabled = true
 
-	if got := RequiredInitImage(cfg); got != config.DefaultStrictInitImage {
-		t.Fatalf("RequiredInitImage() = %q, want %q", got, config.DefaultStrictInitImage)
+	if got := RequiredInitImage(cfg); got != "" {
+		t.Fatalf("RequiredInitImage() = %q, want empty string", got)
 	}
 }
 
