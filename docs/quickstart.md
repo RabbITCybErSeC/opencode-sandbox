@@ -208,16 +208,10 @@ The selected project is mounted into the container at:
 /workspace
 ```
 
-Wrapper state, OpenCode config/data/state, and event logs stay on the host. Network events are written under:
+Wrapper state, OpenCode config/data/state, and event logs stay on the host. Network, command, daemon health, and audit error events are written under:
 
 ```text
-~/.local/state/opencode-sandbox/runs/<run-id>/network-events.jsonl
-```
-
-Command audit events are opt-in while the custom init image path is experimental. When enabled, they are written under:
-
-```text
-~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl
+~/.local/state/opencode-sandbox/runs/<run-id>/audit-events.jsonl
 ```
 
 Command audit uses eBPF exec tracing inside the container VM. It records process execs such as `curl`, `git`, `npm`, and helper binaries with full argv by default. Shell builtins that do not spawn a process are not separate events, and full argv can include secrets.

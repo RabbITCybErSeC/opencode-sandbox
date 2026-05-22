@@ -9,7 +9,7 @@ import (
 func PrintReport(checks []Check, asJSON bool) {
 	if asJSON {
 		data, _ := json.MarshalIndent(map[string]interface{}{
-			"ok":     len(checks) == 0,
+			"ok":     IsHealthy(checks),
 			"checks": checks,
 		}, "", "  ")
 		fmt.Println(string(data))

@@ -153,10 +153,7 @@ func buildRunContainerPlan(plan RunPlan, opts effectiveRunOptions) (containercmd
 			return containercmd.Plan{}, cleanup, fmt.Errorf("generating policy bundle: %w", err)
 		}
 
-		eventLogBase := effective.Network.EBPF.EventLog
-		if eventLogBase == "" {
-			eventLogBase = effective.Audit.Commands.EventLog
-		}
+		eventLogBase := config.AuditEventLogBase(effective)
 		eventLogDir, err = runtime.EventLogDirForBase(runID, eventLogBase)
 		if err != nil {
 			return containercmd.Plan{}, cleanup, fmt.Errorf("resolving event log dir: %w", err)

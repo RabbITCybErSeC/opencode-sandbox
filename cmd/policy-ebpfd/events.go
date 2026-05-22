@@ -1,12 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
+
+	auditlog "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 )
 
 // Event mirrors internal/runtime.NetworkEvent for the daemon.
@@ -48,97 +45,67 @@ type CommandEvent struct {
 
 // DaemonEventWriter writes JSONL events from inside the init container.
 type DaemonEventWriter struct {
-	mu         sync.Mutex
-	hostFile   *os.File
-	mirrorFile *os.File
+	writer *auditlog.Writer
 }
 
 // NewDaemonEventWriter opens the event sinks configured in the bundle.
-func NewDaemonEventWriter(hostPath, mirrorPath string, mirror bool) (*DaemonEventWriter, error) {
-	if err := os.MkdirAll(filepath.Dir(hostPath), 0755); err != nil {
-		return nil, fmt.Errorf("creating host event dir: %w", err)
-	}
-	hostFile, err := os.OpenFile(hostPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+func NewDaemonEventWriter(hostPath, mirrorPath string, mirror bool, rotation auditlog.RotationConfig) (*DaemonEventWriter, error) {
+	writer, err := auditlog.NewWriter(hostPath, mirrorPath, mirror, rotation)
 	if err != nil {
-		return nil, fmt.Errorf("opening host event file: %w", err)
+		return nil, err
 	}
-
-	var mirrorFile *os.File
-	if mirror && mirrorPath != "" {
-		if err := os.MkdirAll(filepath.Dir(mirrorPath), 0755); err != nil {
-			hostFile.Close()
-			return nil, fmt.Errorf("creating mirror event dir: %w", err)
-		}
-		mirrorFile, err = os.OpenFile(mirrorPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			hostFile.Close()
-			return nil, fmt.Errorf("opening mirror event file: %w", err)
-		}
-	}
-
-	return &DaemonEventWriter{
-		hostFile:   hostFile,
-		mirrorFile: mirrorFile,
-	}, nil
+	return &DaemonEventWriter{writer: writer}, nil
 }
 
 // Write emits a single event to all configured sinks.
 func (w *DaemonEventWriter) Write(ev Event) error {
-	return w.writeJSON(ev)
+	return w.writer.Write(auditlog.Event{
+		EventType:   auditlog.EventNetworkConnect,
+		RunID:       ev.RunID,
+		Project:     ev.Project,
+		Backend:     ev.Backend,
+		Hook:        ev.Hook,
+		PID:         ev.PID,
+		Process:     ev.Process,
+		Protocol:    ev.Protocol,
+		DstIP:       ev.DstIP,
+		DstPort:     ev.DstPort,
+		Decision:    ev.Decision,
+		Reason:      ev.Reason,
+		MatchedRule: ev.MatchedRule,
+	})
 }
 
 // WriteCommand emits a single command audit event to all configured sinks.
 func (w *DaemonEventWriter) WriteCommand(ev CommandEvent) error {
-	return w.writeJSON(ev)
+	return w.writer.Write(auditlog.Event{
+		EventType: auditlog.EventCommandExec,
+		RunID:     ev.RunID,
+		Project:   ev.Project,
+		Backend:   ev.Backend,
+		Hook:      ev.Hook,
+		PID:       ev.PID,
+		PPID:      ev.PPID,
+		UID:       ev.UID,
+		GID:       ev.GID,
+		CWD:       ev.CWD,
+		Exe:       ev.Exe,
+		Argv:      ev.Argv,
+		Argc:      ev.Argc,
+		Truncated: ev.Truncated,
+		Decision:  ev.Decision,
+		Reason:    ev.Reason,
+	})
 }
 
-func (w *DaemonEventWriter) writeJSON(ev any) error {
-	switch typed := ev.(type) {
-	case Event:
-		if typed.TS == "" {
-			typed.TS = time.Now().UTC().Format(time.RFC3339)
-		}
-		ev = typed
-	case CommandEvent:
-		if typed.TS == "" {
-			typed.TS = time.Now().UTC().Format(time.RFC3339)
-		}
-		ev = typed
+func (w *DaemonEventWriter) WriteAudit(ev auditlog.Event) error {
+	if ev.EventType == "" {
+		return fmt.Errorf("audit event type is empty")
 	}
-
-	line, err := json.Marshal(ev)
-	if err != nil {
-		return fmt.Errorf("marshaling event: %w", err)
-	}
-	line = append(line, '\n')
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if _, err := w.hostFile.Write(line); err != nil {
-		return fmt.Errorf("writing host event: %w", err)
-	}
-	if w.mirrorFile != nil {
-		if _, err := w.mirrorFile.Write(line); err != nil {
-			return fmt.Errorf("writing mirror event: %w", err)
-		}
-	}
-	return nil
+	return w.writer.Write(ev)
 }
 
 // Close flushes and closes all sinks.
 func (w *DaemonEventWriter) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	var firstErr error
-	if err := w.hostFile.Close(); err != nil {
-		firstErr = err
-	}
-	if w.mirrorFile != nil {
-		if err := w.mirrorFile.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
+	return w.writer.Close()
 }

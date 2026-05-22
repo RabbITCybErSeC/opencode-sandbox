@@ -1,5 +1,7 @@
 package config
 
+import "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
+
 const (
 	// DefaultImageName is the published runtime image used by fresh installs.
 	DefaultImageName = "ghcr.io/rabbitcybersec/opencode-sandbox:latest"
@@ -48,6 +50,10 @@ func Defaults() EffectiveConfig {
 			},
 		},
 		Audit: EffectiveAudit{
+			Rotation: EffectiveAuditRotation{
+				MaxBytes: audit.DefaultRotationMaxBytes,
+				MaxFiles: audit.DefaultRotationMaxFiles,
+			},
 			Commands: EffectiveCommandAudit{
 				Enabled:             false,
 				Backend:             "ebpf",

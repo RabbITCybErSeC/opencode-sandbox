@@ -168,6 +168,16 @@ func TestEventLogDirForBaseExpandsHome(t *testing.T) {
 	}
 }
 
+func TestEventLogBaseDirDefault(t *testing.T) {
+	dir, err := EventLogBaseDir("")
+	if err != nil {
+		t.Fatalf("EventLogBaseDir failed: %v", err)
+	}
+	if !strings.HasSuffix(dir, filepath.Join(".local", "state", "opencode-sandbox", "runs")) {
+		t.Fatalf("unexpected base dir: %s", dir)
+	}
+}
+
 func TestEventWriterMirror(t *testing.T) {
 	dir := t.TempDir()
 	hostPath := filepath.Join(dir, "host.jsonl")

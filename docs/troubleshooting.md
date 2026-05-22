@@ -98,7 +98,7 @@ network:
 3. Review event logs to see the exact decision:
 
 ```bash
-cat ~/.local/state/opencode-sandbox/runs/<latest-run>/network-events.jsonl
+cat ~/.local/state/opencode-sandbox/runs/<latest-run>/audit-events.jsonl
 ```
 
 ### Event logs are empty

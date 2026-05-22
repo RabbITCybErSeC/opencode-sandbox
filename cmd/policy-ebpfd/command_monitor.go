@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	auditlog "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
@@ -20,11 +21,13 @@ import (
 )
 
 const (
-	commandHookExecve   = "execve"
-	commandHookExecveat = "execveat"
+	commandHookExecve    = "execve"
+	commandHookExecveat  = "execveat"
+	commandHookSchedExec = "sched_process_exec"
 
-	commandSyscallExecve   = uint32(1)
-	commandSyscallExecveat = uint32(2)
+	commandSyscallExecve    = uint32(1)
+	commandSyscallExecveat  = uint32(2)
+	commandSyscallSchedExec = uint32(3)
 )
 
 type bpfCommandEvent struct {
@@ -36,17 +39,18 @@ type bpfCommandEvent struct {
 
 // CommandMonitor owns eBPF exec tracepoints and the userspace event loop.
 type CommandMonitor struct {
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	rd     *perf.Reader
-	links  []link.Link
-	progs  []*ebpf.Program
-	events *ebpf.Map
-	writer *DaemonEventWriter
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	rd        *perf.Reader
+	links     []link.Link
+	progs     []*ebpf.Program
+	events    *ebpf.Map
+	writer    *DaemonEventWriter
+	ownWriter bool
 }
 
 // StartCommandMonitor attaches execve/execveat tracepoints and starts logging.
-func StartCommandMonitor(bundle *PolicyBundle) (*CommandMonitor, error) {
+func StartCommandMonitor(bundle *PolicyBundle, sharedWriter ...*DaemonEventWriter) (*CommandMonitor, error) {
 	cfg := bundle.Audit.Commands
 	if cfg.HostJsonl == "" {
 		return nil, fmt.Errorf("command audit hostJsonl is empty")
@@ -55,9 +59,17 @@ func StartCommandMonitor(bundle *PolicyBundle) (*CommandMonitor, error) {
 		return nil, fmt.Errorf("removing memlock limit: %w", err)
 	}
 
-	writer, err := NewDaemonEventWriter(cfg.HostJsonl, cfg.ProjectMirrorJsonl, cfg.MirrorProjectEvents)
-	if err != nil {
-		return nil, fmt.Errorf("creating command event writer: %w", err)
+	var writer *DaemonEventWriter
+	ownWriter := false
+	if len(sharedWriter) > 0 && sharedWriter[0] != nil {
+		writer = sharedWriter[0]
+	} else {
+		var err error
+		writer, err = NewDaemonEventWriter(cfg.HostJsonl, cfg.ProjectMirrorJsonl, cfg.MirrorProjectEvents, bundle.Audit.Events.Rotation)
+		if err != nil {
+			return nil, fmt.Errorf("creating command event writer: %w", err)
+		}
+		ownWriter = true
 	}
 
 	events, err := ebpf.NewMap(&ebpf.MapSpec{
@@ -65,27 +77,28 @@ func StartCommandMonitor(bundle *PolicyBundle) (*CommandMonitor, error) {
 		Name: "command_events",
 	})
 	if err != nil {
-		writer.Close()
+		if ownWriter {
+			writer.Close()
+		}
 		return nil, fmt.Errorf("creating command event map: %w", err)
 	}
 
 	rd, err := perf.NewReader(events, os.Getpagesize())
 	if err != nil {
 		events.Close()
-		writer.Close()
+		if ownWriter {
+			writer.Close()
+		}
 		return nil, fmt.Errorf("creating command event reader: %w", err)
 	}
 
 	monitor := &CommandMonitor{
-		rd:     rd,
-		events: events,
-		writer: writer,
+		rd:        rd,
+		events:    events,
+		writer:    writer,
+		ownWriter: ownWriter,
 	}
-	if err := monitor.attachTracepoint(commandHookExecve, commandSyscallExecve); err != nil {
-		monitor.Close()
-		return nil, err
-	}
-	if err := monitor.attachTracepoint(commandHookExecveat, commandSyscallExecveat); err != nil {
+	if err := monitor.attachTracepoint("sched", commandHookSchedExec, commandHookSchedExec, commandSyscallSchedExec); err != nil {
 		monitor.Close()
 		return nil, err
 	}
@@ -98,7 +111,7 @@ func StartCommandMonitor(bundle *PolicyBundle) (*CommandMonitor, error) {
 	return monitor, nil
 }
 
-func (m *CommandMonitor) attachTracepoint(hook string, syscall uint32) error {
+func (m *CommandMonitor) attachTracepoint(category, event, hook string, syscall uint32) error {
 	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
 		Name:         "command_audit_" + hook,
 		Type:         ebpf.TracePoint,
@@ -110,7 +123,7 @@ func (m *CommandMonitor) attachTracepoint(hook string, syscall uint32) error {
 	}
 	m.progs = append(m.progs, prog)
 
-	tp, err := link.Tracepoint("syscalls", "sys_enter_"+hook, prog, nil)
+	tp, err := link.Tracepoint(category, event, prog, nil)
 	if err != nil {
 		return fmt.Errorf("attaching command audit %s tracepoint: %w", hook, err)
 	}
@@ -165,10 +178,12 @@ func (m *CommandMonitor) run(ctx context.Context, bundle *PolicyBundle) {
 		}
 		if record.LostSamples > 0 {
 			fmt.Fprintf(os.Stderr, "policy-ebpfd: lost %d command audit samples\n", record.LostSamples)
+			_ = m.writer.WriteAudit(auditlog.Event{EventType: auditlog.EventAuditError, RunID: bundle.RunID, Project: bundle.Project.Name, Backend: "ebpf", Component: "command-audit", Reason: "lost-samples", LostSamples: record.LostSamples})
 		}
 		ev, err := commandEventFromSample(record.RawSample, bundle)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "policy-ebpfd: parsing command audit event: %v\n", err)
+			_ = m.writer.WriteAudit(auditlog.Event{EventType: auditlog.EventAuditError, RunID: bundle.RunID, Project: bundle.Project.Name, Backend: "ebpf", Component: "command-audit", Reason: "parse-error", Error: err.Error()})
 			continue
 		}
 		if ev == nil {
@@ -176,6 +191,7 @@ func (m *CommandMonitor) run(ctx context.Context, bundle *PolicyBundle) {
 		}
 		if err := m.writer.WriteCommand(*ev); err != nil {
 			fmt.Fprintf(os.Stderr, "policy-ebpfd: writing command audit event: %v\n", err)
+			_ = m.writer.WriteAudit(auditlog.Event{EventType: auditlog.EventAuditError, RunID: bundle.RunID, Project: bundle.Project.Name, Backend: "ebpf", Component: "command-audit", Reason: "write-error", Error: err.Error()})
 		}
 	}
 }
@@ -190,8 +206,11 @@ func commandEventFromSample(raw []byte, bundle *PolicyBundle) (*CommandEvent, er
 		Syscall: binary.LittleEndian.Uint32(raw[8:12]),
 	}
 	hook := commandHookExecve
-	if ev.Syscall == commandSyscallExecveat {
+	switch ev.Syscall {
+	case commandSyscallExecveat:
 		hook = commandHookExecveat
+	case commandSyscallSchedExec:
+		hook = commandHookSchedExec
 	}
 	enriched := enrichCommandEvent(int(ev.PID), int(ev.UID), hook, bundle)
 	if !commandEventAllowed(enriched, bundle.Audit.Commands) {
@@ -380,7 +399,7 @@ func (m *CommandMonitor) Close() error {
 			firstErr = err
 		}
 	}
-	if m.writer != nil {
+	if m.writer != nil && m.ownWriter {
 		if err := m.writer.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}

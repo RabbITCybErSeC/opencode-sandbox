@@ -63,10 +63,10 @@ For a fuller setup guide, including local CLI build, config paths, skill import,
 
 ## Command Audit Logging
 
-Command audit logging is opt-in while the custom init image path is experimental. When enabled, the init daemon attaches eBPF exec tracepoints inside the Apple container Linux VM and writes every observed process exec to:
+Command audit logging is opt-in while the custom init image path is experimental. When enabled, the init daemon attaches eBPF exec tracepoints inside the Apple container Linux VM and writes observed process exec events to the unified audit log:
 
 ```text
-~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl
+~/.local/state/opencode-sandbox/runs/<run-id>/audit-events.jsonl
 ```
 
 The log includes full argv by default, so it may contain URLs, prompts, tokens, or other command-line secrets. If a run hangs at Apple container startup and the boot log mentions `/sbin/vminitd`, disable command audit and use practical proxy mode until the init image is rebuilt.

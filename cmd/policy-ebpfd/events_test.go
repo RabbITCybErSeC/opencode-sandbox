@@ -7,13 +7,19 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	auditlog "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 )
+
+func testRotation() auditlog.RotationConfig {
+	return auditlog.RotationConfig{MaxBytes: auditlog.DefaultRotationMaxBytes, MaxFiles: auditlog.DefaultRotationMaxFiles}
+}
 
 func TestDaemonEventWriterCreatesHostFile(t *testing.T) {
 	dir := t.TempDir()
 	hostPath := filepath.Join(dir, "network-events.jsonl")
 
-	w, err := NewDaemonEventWriter(hostPath, "", false)
+	w, err := NewDaemonEventWriter(hostPath, "", false, testRotation())
 	if err != nil {
 		t.Fatalf("NewDaemonEventWriter failed: %v", err)
 	}
@@ -29,7 +35,7 @@ func TestDaemonEventWriterCreatesMirrorWhenEnabled(t *testing.T) {
 	hostPath := filepath.Join(dir, "host.jsonl")
 	mirrorPath := filepath.Join(dir, "mirror.jsonl")
 
-	w, err := NewDaemonEventWriter(hostPath, mirrorPath, true)
+	w, err := NewDaemonEventWriter(hostPath, mirrorPath, true, testRotation())
 	if err != nil {
 		t.Fatalf("NewDaemonEventWriter failed: %v", err)
 	}
@@ -45,7 +51,7 @@ func TestDaemonEventWriterOmitsMirrorWhenDisabled(t *testing.T) {
 	hostPath := filepath.Join(dir, "host.jsonl")
 	mirrorPath := filepath.Join(dir, "mirror.jsonl")
 
-	w, err := NewDaemonEventWriter(hostPath, mirrorPath, false)
+	w, err := NewDaemonEventWriter(hostPath, mirrorPath, false, testRotation())
 	if err != nil {
 		t.Fatalf("NewDaemonEventWriter failed: %v", err)
 	}
@@ -61,7 +67,7 @@ func TestDaemonEventWriterEmitsValidJSONL(t *testing.T) {
 	dir := t.TempDir()
 	hostPath := filepath.Join(dir, "network-events.jsonl")
 
-	w, err := NewDaemonEventWriter(hostPath, "", false)
+	w, err := NewDaemonEventWriter(hostPath, "", false, testRotation())
 	if err != nil {
 		t.Fatalf("NewDaemonEventWriter failed: %v", err)
 	}
@@ -97,6 +103,13 @@ func TestDaemonEventWriterEmitsValidJSONL(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("parsing event JSON: %v", err)
 	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &raw); err != nil {
+		t.Fatalf("parsing raw event JSON: %v", err)
+	}
+	if raw["schemaVersion"] == nil || raw["eventType"] != auditlog.EventNetworkConnect {
+		t.Fatalf("expected audit envelope fields, got %v", raw)
+	}
 
 	if parsed.RunID != "run-1" {
 		t.Errorf("unexpected runId: %s", parsed.RunID)
@@ -119,7 +132,7 @@ func TestDaemonEventWriterNoSecrets(t *testing.T) {
 	dir := t.TempDir()
 	hostPath := filepath.Join(dir, "network-events.jsonl")
 
-	w, err := NewDaemonEventWriter(hostPath, "", false)
+	w, err := NewDaemonEventWriter(hostPath, "", false, testRotation())
 	if err != nil {
 		t.Fatalf("NewDaemonEventWriter failed: %v", err)
 	}

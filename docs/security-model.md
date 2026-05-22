@@ -129,7 +129,7 @@ audit:
 Host log path:
 
 ```text
-~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl
+~/.local/state/opencode-sandbox/runs/<run-id>/audit-events.jsonl
 ```
 
 ## Best Practices

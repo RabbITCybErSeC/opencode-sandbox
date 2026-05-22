@@ -117,14 +117,23 @@ func EventLogDir(runID string) (string, error) {
 // EventLogDirForBase returns the durable host event directory for a run,
 // optionally rooted at a configured base directory.
 func EventLogDirForBase(runID, baseDir string) (string, error) {
+	root, err := EventLogBaseDir(baseDir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, runID), nil
+}
+
+// EventLogBaseDir returns the host directory containing per-run log dirs.
+func EventLogBaseDir(baseDir string) (string, error) {
 	if baseDir != "" {
-		return filepath.Join(expandHome(baseDir), runID), nil
+		return expandHome(baseDir), nil
 	}
 	stateDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(stateDir, ".local", "state", "opencode-sandbox", "runs", runID), nil
+	return filepath.Join(stateDir, ".local", "state", "opencode-sandbox", "runs"), nil
 }
 
 func expandHome(path string) string {

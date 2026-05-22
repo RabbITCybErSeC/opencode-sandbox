@@ -59,6 +59,10 @@ func TestGeneratePolicyBundle(t *testing.T) {
 			},
 		},
 		Audit: config.EffectiveAudit{
+			Rotation: config.EffectiveAuditRotation{
+				MaxBytes: 10485760,
+				MaxFiles: 5,
+			},
 			Commands: config.EffectiveCommandAudit{
 				Enabled:             true,
 				Backend:             "ebpf",
@@ -126,10 +130,22 @@ func TestGeneratePolicyBundle(t *testing.T) {
 	if bundle.Resolver.TTLMaxSeconds != 300 {
 		t.Errorf("unexpected ttlMaxSeconds: %d", bundle.Resolver.TTLMaxSeconds)
 	}
-	if bundle.Events.HostJsonl != "/sandbox/logs/network-events.jsonl" {
+	if bundle.Audit.Events.HostJsonl != "/sandbox/logs/audit-events.jsonl" {
+		t.Errorf("unexpected audit hostJsonl: %s", bundle.Audit.Events.HostJsonl)
+	}
+	if bundle.Audit.Events.ProjectMirrorJsonl != "/workspace/.opencode-sandbox/audit-events.jsonl" {
+		t.Errorf("unexpected audit projectMirrorJsonl: %s", bundle.Audit.Events.ProjectMirrorJsonl)
+	}
+	if !bundle.Audit.Events.MirrorProjectEvents {
+		t.Error("expected audit mirrorProjectEvents true")
+	}
+	if bundle.Audit.Events.Rotation.MaxBytes == 0 || bundle.Audit.Events.Rotation.MaxFiles == 0 {
+		t.Errorf("expected audit rotation defaults: %+v", bundle.Audit.Events.Rotation)
+	}
+	if bundle.Events.HostJsonl != "/sandbox/logs/audit-events.jsonl" {
 		t.Errorf("unexpected hostJsonl: %s", bundle.Events.HostJsonl)
 	}
-	if bundle.Events.ProjectMirrorJsonl != "/workspace/.opencode-sandbox/network-events.jsonl" {
+	if bundle.Events.ProjectMirrorJsonl != "/workspace/.opencode-sandbox/audit-events.jsonl" {
 		t.Errorf("unexpected projectMirrorJsonl: %s", bundle.Events.ProjectMirrorJsonl)
 	}
 	if !bundle.Events.MirrorProjectEvents {
@@ -147,10 +163,10 @@ func TestGeneratePolicyBundle(t *testing.T) {
 	if bundle.Audit.Commands.LogArgs != "full" {
 		t.Errorf("unexpected command audit logArgs: %s", bundle.Audit.Commands.LogArgs)
 	}
-	if bundle.Audit.Commands.HostJsonl != "/sandbox/logs/command-events.jsonl" {
+	if bundle.Audit.Commands.HostJsonl != "/sandbox/logs/audit-events.jsonl" {
 		t.Errorf("unexpected command hostJsonl: %s", bundle.Audit.Commands.HostJsonl)
 	}
-	if bundle.Audit.Commands.ProjectMirrorJsonl != "/workspace/.opencode-sandbox/command-events.jsonl" {
+	if bundle.Audit.Commands.ProjectMirrorJsonl != "/workspace/.opencode-sandbox/audit-events.jsonl" {
 		t.Errorf("unexpected command projectMirrorJsonl: %s", bundle.Audit.Commands.ProjectMirrorJsonl)
 	}
 	if len(bundle.Audit.Commands.IncludeExecutables) != 1 || bundle.Audit.Commands.IncludeExecutables[0] != "/usr/bin/curl" {

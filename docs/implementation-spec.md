@@ -1050,7 +1050,7 @@ Suggested implementation:
   - `NO_PROXY=localhost,127.0.0.1,::1`
 - Deny DNS answers for blocklisted domains.
 - Deny HTTP CONNECT or HTTP absolute-form proxy requests for blocklisted hosts.
-- Log blocked attempts to `/sandbox/logs/network.log`.
+- Log network and command audit attempts to `/sandbox/logs/audit-events.jsonl`.
 
 Practical mode limitations to document:
 
