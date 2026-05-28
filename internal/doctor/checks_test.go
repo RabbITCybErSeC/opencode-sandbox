@@ -2,15 +2,19 @@ package doctor
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 )
 
 func TestRunWithDefaults(t *testing.T) {
 	withImageInspect(t, nil)
 	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
 	checks := Run(cfg)
 	if len(checks) == 0 {
 		t.Fatal("expected checks")
@@ -29,6 +33,7 @@ func TestRunWithDefaults(t *testing.T) {
 func TestRunWithEBPFMissingInitImage(t *testing.T) {
 	withImageInspect(t, nil)
 	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
 	cfg.Network.Backend = "ebpf"
 	cfg.Network.EBPF.InitImage = ""
 
@@ -50,6 +55,7 @@ func TestRunWithEBPFMissingInitImage(t *testing.T) {
 func TestRunWithDefaultCommandAuditMissingInitImageWarns(t *testing.T) {
 	withImageInspect(t, errors.New("image not found"))
 	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
 	cfg.Network.Mode = "practical"
 	cfg.Network.Backend = "proxy"
 	cfg.Audit.Commands.Enabled = true
@@ -72,9 +78,45 @@ func TestRunWithDefaultCommandAuditMissingInitImageWarns(t *testing.T) {
 	}
 }
 
+func TestRunReportsMissingAuditLog(t *testing.T) {
+	withImageInspect(t, nil)
+	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
+
+	checks := Run(cfg)
+	check := findCheck(t, checks, "audit.logs")
+	if check.Status != StatusWarn {
+		t.Fatalf("expected warn for missing audit log, got %+v", check)
+	}
+	if !strings.Contains(check.Message, audit.DefaultFileName) {
+		t.Fatalf("expected audit log filename in message, got %q", check.Message)
+	}
+}
+
+func TestRunReportsLatestAuditLog(t *testing.T) {
+	withImageInspect(t, nil)
+	base := t.TempDir()
+	runDir := filepath.Join(base, "run-1")
+	if err := os.MkdirAll(runDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, audit.DefaultFileName), []byte("{}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Audit.EventLog = base
+
+	checks := Run(cfg)
+	check := findCheck(t, checks, "audit.logs")
+	if check.Status != StatusPass {
+		t.Fatalf("expected pass for existing audit log, got %+v", check)
+	}
+}
+
 func TestRunWithEBPFMissingNetworkName(t *testing.T) {
 	withImageInspect(t, nil)
 	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
 	cfg.Network.Backend = "ebpf"
 	cfg.Network.EBPF.InitImage = "opencode-sandbox-init:latest"
 	cfg.Network.EBPF.NetworkName = ""
@@ -147,4 +189,15 @@ func withImageInspect(t *testing.T, err error) {
 		return nil, nil
 	}
 	t.Cleanup(func() { inspectDoctorImage = oldInspect })
+}
+
+func findCheck(t *testing.T, checks []Check, id string) Check {
+	t.Helper()
+	for _, check := range checks {
+		if check.ID == id {
+			return check
+		}
+	}
+	t.Fatalf("expected check %s", id)
+	return Check{}
 }

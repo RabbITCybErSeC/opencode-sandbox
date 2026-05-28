@@ -178,16 +178,34 @@ func collectSkillsList(project string) ([]skillListItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting config dir: %w", err)
 	}
+
+	// On macOS, os.UserConfigDir() returns ~/Library/Preferences,
+	// but skills may be installed at ~/.config/opencode-sandbox/skills.
+	// Check both locations.
+	home, _ := os.UserHomeDir()
+	xdgConfigDir := filepath.Join(home, ".config")
+
 	roots := []struct {
 		scope string
 		path  string
 	}{
 		{"global-imported", filepath.Join(configDir, "opencode-sandbox", "skills")},
+	}
+	if xdgConfigDir != configDir {
+		roots = append(roots, struct {
+			scope string
+			path  string
+		}{"global-xdg", filepath.Join(xdgConfigDir, "opencode-sandbox", "skills")})
+	}
+	roots = append(roots, []struct {
+		scope string
+		path  string
+	}{
 		{"project-imported", filepath.Join(project, ".opencode-sandbox", "skills")},
 		{"project-opencode", filepath.Join(project, ".opencode", "skills")},
 		{"project-agents", filepath.Join(project, ".agents", "skills")},
 		{"project-claude", filepath.Join(project, ".claude", "skills")},
-	}
+	}...)
 	for _, root := range roots {
 		found, err := skills.Discover(root.path)
 		if os.IsNotExist(err) {

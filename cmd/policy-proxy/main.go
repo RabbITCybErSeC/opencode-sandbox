@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	auditlog "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 )
 
 // Policy describes the network policy.
@@ -18,6 +20,21 @@ type Policy struct {
 	DefaultAction string   `json:"defaultAction"`
 	Blocklist     []string `json:"blocklist"`
 	Allowlist     []string `json:"allowlist"`
+	RunID         string   `json:"runId"`
+	Project       struct {
+		Name string `json:"name"`
+	} `json:"project"`
+	Network struct {
+		Backend string `json:"backend"`
+	} `json:"network"`
+	Audit struct {
+		Events struct {
+			HostJsonl           string                  `json:"hostJsonl"`
+			ProjectMirrorJsonl  string                  `json:"projectMirrorJsonl"`
+			MirrorProjectEvents bool                    `json:"mirrorProjectEvents"`
+			Rotation            auditlog.RotationConfig `json:"rotation"`
+		} `json:"events"`
+	} `json:"audit"`
 }
 
 func main() {
@@ -42,12 +59,26 @@ func main() {
 		proxyPort = "18080"
 	}
 
-	logFile := os.Getenv("POLICY_LOG_FILE")
-	if logFile == "" {
-		logFile = "/sandbox/logs/network.log"
+	hostLog := policy.Audit.Events.HostJsonl
+	if hostLog == "" {
+		hostLog = os.Getenv("POLICY_LOG_FILE")
 	}
-
-	logger, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if hostLog == "" {
+		hostLog = "/sandbox/logs/" + auditlog.DefaultFileName
+	}
+	rotation := policy.Audit.Events.Rotation
+	if rotation.MaxBytes == 0 {
+		rotation.MaxBytes = auditlog.DefaultRotationMaxBytes
+	}
+	if rotation.MaxFiles == 0 {
+		rotation.MaxFiles = auditlog.DefaultRotationMaxFiles
+	}
+	logger, err := auditlog.NewWriter(
+		hostLog,
+		policy.Audit.Events.ProjectMirrorJsonl,
+		policy.Audit.Events.MirrorProjectEvents,
+		rotation,
+	)
 	if err != nil {
 		log.Fatalf("opening log file: %v", err)
 	}
@@ -70,7 +101,7 @@ func main() {
 // Proxy implements an HTTP CONNECT proxy with policy enforcement.
 type Proxy struct {
 	Policy Policy
-	Logger *os.File
+	Logger *auditlog.Writer
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -88,24 +119,23 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostname, _, _ := net.SplitHostPort(host)
-	if hostname == "" {
-		hostname = host
-	}
+	hostname, port := splitHostPort(host)
 
 	decision, rule := p.decide(hostname)
 	if decision == "block" {
-		p.logBlock(hostname, rule, "CONNECT")
+		p.logNetwork(hostname, port, "CONNECT", decision, "policy-block", rule, "")
 		http.Error(w, "blocked by policy", http.StatusForbidden)
 		return
 	}
 
 	dest, err := net.DialTimeout("tcp", host, 10*time.Second)
 	if err != nil {
+		p.logNetwork(hostname, port, "CONNECT", "error", "upstream-error", rule, err.Error())
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	defer dest.Close()
+	p.logNetwork(hostname, port, "CONNECT", decision, "policy-allow", rule, "")
 
 	w.WriteHeader(http.StatusOK)
 
@@ -133,20 +163,28 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if hostname == "" {
 		hostname = r.Host
 	}
+	hostname, port := splitHostPort(hostname)
+	if port == 0 {
+		port = defaultPort(r.URL.Scheme)
+	}
 
 	decision, rule := p.decide(hostname)
 	if decision == "block" {
-		p.logBlock(hostname, rule, "HTTP")
+		p.logNetwork(hostname, port, "HTTP", decision, "policy-block", rule, "")
 		http.Error(w, "blocked by policy", http.StatusForbidden)
 		return
 	}
 
-	resp, err := http.DefaultTransport.RoundTrip(r)
+	outReq := r.Clone(r.Context())
+	outReq.RequestURI = ""
+	resp, err := http.DefaultTransport.RoundTrip(outReq)
 	if err != nil {
+		p.logNetwork(hostname, port, "HTTP", "error", "upstream-error", rule, err.Error())
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
+	p.logNetwork(hostname, port, "HTTP", decision, "policy-allow", rule, "")
 
 	for k, v := range resp.Header {
 		w.Header()[k] = v
@@ -178,10 +216,28 @@ func (p *Proxy) decide(hostname string) (string, string) {
 	return "allow", ""
 }
 
-func (p *Proxy) logBlock(hostname, rule, method string) {
-	ts := time.Now().UTC().Format(time.RFC3339)
-	line := fmt.Sprintf("%s blocked=%s rule=%q method=%s mode=%s\n", ts, hostname, rule, method, p.Policy.Mode)
-	p.Logger.WriteString(line)
+func (p *Proxy) logNetwork(hostname string, port int, method, decision, reason, rule, errText string) {
+	if p.Logger == nil {
+		return
+	}
+	backend := p.Policy.Network.Backend
+	if backend == "" {
+		backend = "proxy"
+	}
+	_ = p.Logger.Write(auditlog.Event{
+		EventType:   auditlog.EventNetworkConnect,
+		RunID:       p.Policy.RunID,
+		Project:     p.Policy.Project.Name,
+		Backend:     backend,
+		Method:      method,
+		Protocol:    "tcp",
+		Host:        hostname,
+		DstPort:     port,
+		Decision:    decision,
+		Reason:      reason,
+		MatchedRule: rule,
+		Error:       errText,
+	})
 }
 
 func matchDomain(domain, rule string) bool {
@@ -190,4 +246,24 @@ func matchDomain(domain, rule string) bool {
 		return strings.HasSuffix(domain, "."+suffix)
 	}
 	return domain == rule
+}
+
+func splitHostPort(hostport string) (string, int) {
+	hostname, portText, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return strings.Trim(hostport, "[]"), 0
+	}
+	port, _ := net.LookupPort("tcp", portText)
+	return hostname, port
+}
+
+func defaultPort(scheme string) int {
+	switch scheme {
+	case "https":
+		return 443
+	case "http":
+		return 80
+	default:
+		return 0
+	}
 }

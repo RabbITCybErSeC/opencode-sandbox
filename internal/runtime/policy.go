@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 )
 
@@ -53,7 +54,16 @@ type NetworkConfig struct {
 
 // AuditConfig holds audit settings in the bundle.
 type AuditConfig struct {
+	Events   AuditEventsConfig  `json:"events"`
 	Commands CommandAuditConfig `json:"commands"`
+}
+
+// AuditEventsConfig holds unified audit event log settings.
+type AuditEventsConfig struct {
+	HostJsonl           string               `json:"hostJsonl"`
+	ProjectMirrorJsonl  string               `json:"projectMirrorJsonl"`
+	MirrorProjectEvents bool                 `json:"mirrorProjectEvents"`
+	Rotation            audit.RotationConfig `json:"rotation"`
 }
 
 // CommandAuditConfig holds command execution audit settings.
@@ -131,6 +141,15 @@ func GeneratePolicyBundle(stagingDir, runID, projectPath, projectName string, cf
 			FailClosed:    cfg.Network.FailClosed,
 		},
 		Audit: AuditConfig{
+			Events: AuditEventsConfig{
+				HostJsonl:           "/sandbox/logs/" + audit.DefaultFileName,
+				ProjectMirrorJsonl:  "/workspace/.opencode-sandbox/" + audit.DefaultFileName,
+				MirrorProjectEvents: cfg.Network.EBPF.MirrorProjectEvents || cfg.Audit.Commands.MirrorProjectEvents,
+				Rotation: audit.RotationConfig{
+					MaxBytes: cfg.Audit.Rotation.MaxBytes,
+					MaxFiles: cfg.Audit.Rotation.MaxFiles,
+				},
+			},
 			Commands: CommandAuditConfig{
 				Enabled:             cfg.Audit.Commands.Enabled,
 				Backend:             cfg.Audit.Commands.Backend,
@@ -143,8 +162,8 @@ func GeneratePolicyBundle(stagingDir, runID, projectPath, projectName string, cf
 				IncludeCwd:          cfg.Audit.Commands.IncludeCwd,
 				ExcludeCwd:          cfg.Audit.Commands.ExcludeCwd,
 				MirrorProjectEvents: cfg.Audit.Commands.MirrorProjectEvents,
-				HostJsonl:           "/sandbox/logs/command-events.jsonl",
-				ProjectMirrorJsonl:  "/workspace/.opencode-sandbox/command-events.jsonl",
+				HostJsonl:           "/sandbox/logs/" + audit.DefaultFileName,
+				ProjectMirrorJsonl:  "/workspace/.opencode-sandbox/" + audit.DefaultFileName,
 			},
 		},
 		Rules: Rules{
@@ -158,8 +177,8 @@ func GeneratePolicyBundle(stagingDir, runID, projectPath, projectName string, cf
 			TTLMaxSeconds: 300,
 		},
 		Events: EventsConfig{
-			HostJsonl:           "/sandbox/logs/network-events.jsonl",
-			ProjectMirrorJsonl:  "/workspace/.opencode-sandbox/network-events.jsonl",
+			HostJsonl:           "/sandbox/logs/" + audit.DefaultFileName,
+			ProjectMirrorJsonl:  "/workspace/.opencode-sandbox/" + audit.DefaultFileName,
 			MirrorProjectEvents: cfg.Network.EBPF.MirrorProjectEvents,
 		},
 		// Backward compatibility for the proxy.

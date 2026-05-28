@@ -8,6 +8,7 @@ FROM golang:${GO_VERSION}-bookworm AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
 COPY cmd/policy-proxy ./cmd/policy-proxy
+COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o policy-proxy ./cmd/policy-proxy
 
 # ---

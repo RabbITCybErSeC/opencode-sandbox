@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	auditlog "github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 )
 
 // PolicyBundle mirrors the runtime bundle shape.
@@ -27,6 +29,7 @@ type PolicyBundle struct {
 		FailClosed    bool   `json:"failClosed"`
 	} `json:"network"`
 	Audit struct {
+		Events   AuditEventsConfig  `json:"events"`
 		Commands CommandAuditConfig `json:"commands"`
 	} `json:"audit"`
 	Rules struct {
@@ -49,6 +52,14 @@ type PolicyBundle struct {
 	Mode      string   `json:"mode"`
 	Blocklist []string `json:"blocklist"`
 	Allowlist []string `json:"allowlist"`
+}
+
+// AuditEventsConfig mirrors the unified audit event bundle shape.
+type AuditEventsConfig struct {
+	HostJsonl           string                  `json:"hostJsonl"`
+	ProjectMirrorJsonl  string                  `json:"projectMirrorJsonl"`
+	MirrorProjectEvents bool                    `json:"mirrorProjectEvents"`
+	Rotation            auditlog.RotationConfig `json:"rotation"`
 }
 
 // CommandAuditConfig mirrors the command audit bundle shape.
@@ -93,10 +104,23 @@ func run() error {
 	if err := validateBundle(bundle); err != nil {
 		return fmt.Errorf("validating policy bundle: %w", err)
 	}
+	normalizeAuditEventConfig(bundle)
 
 	fmt.Printf("policy-ebpfd: runId=%s project=%s mode=%s backend=%s defaultAction=%s\n",
 		bundle.RunID, bundle.Project.Name, bundle.Network.Mode,
 		bundle.Network.Backend, bundle.Network.DefaultAction)
+
+	eventWriter, err := NewDaemonEventWriter(
+		bundle.Audit.Events.HostJsonl,
+		bundle.Audit.Events.ProjectMirrorJsonl,
+		bundle.Audit.Events.MirrorProjectEvents,
+		bundle.Audit.Events.Rotation,
+	)
+	if err != nil {
+		return fmt.Errorf("creating event writer: %w", err)
+	}
+	defer eventWriter.Close()
+	_ = eventWriter.WriteAudit(healthEvent(bundle, "daemon", true, "daemon-start"))
 
 	// Probe available eBPF capabilities.
 	caps := probeCapabilities()
@@ -110,6 +134,7 @@ func run() error {
 		enforcer, attachErr = tryAttachHooks(caps, bundle)
 		if attachErr != nil {
 			fmt.Fprintf(os.Stderr, "policy-ebpfd: network hook attach failed: %v\n", attachErr)
+			_ = eventWriter.WriteAudit(healthEvent(bundle, "network-hook", false, attachErr.Error()))
 			if bundle.Network.FailClosed {
 				return fmt.Errorf("fail-closed: cannot establish eBPF enforcement")
 			}
@@ -122,9 +147,10 @@ func run() error {
 
 	var commandMonitor *CommandMonitor
 	if bundle.Audit.Commands.Enabled {
-		monitor, err := StartCommandMonitor(bundle)
+		monitor, err := StartCommandMonitor(bundle, eventWriter)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "policy-ebpfd: command audit attach failed: %v\n", err)
+			_ = eventWriter.WriteAudit(healthEvent(bundle, "command-audit", false, err.Error()))
 			if bundle.Audit.Commands.FailClosed {
 				return fmt.Errorf("fail-closed: cannot establish command audit")
 			}
@@ -132,33 +158,21 @@ func run() error {
 		} else {
 			commandMonitor = monitor
 			defer commandMonitor.Close()
+			_ = commandMonitor.writer.WriteAudit(healthEvent(bundle, "command-audit", true, "attached"))
 			fmt.Println("policy-ebpfd: eBPF command audit attached successfully")
 		}
 	}
 
-	// Start network event writer.
-	eventWriter, err := NewDaemonEventWriter(
-		bundle.Events.HostJsonl,
-		bundle.Events.ProjectMirrorJsonl,
-		bundle.Events.MirrorProjectEvents,
-	)
-	if err != nil {
-		return fmt.Errorf("creating event writer: %w", err)
+	if enforcer != nil {
+		_ = eventWriter.WriteAudit(healthEvent(bundle, "network-hook", true, "attached"))
+		networkMonitor, err := StartNetworkEventMonitor(bundle, enforcer, eventWriter)
+		if err != nil {
+			_ = eventWriter.WriteAudit(auditlog.Event{EventType: auditlog.EventAuditError, RunID: bundle.RunID, Project: bundle.Project.Name, Backend: "ebpf", Component: "network-connect", Reason: "attach-failed", Error: err.Error()})
+		} else {
+			defer networkMonitor.Close()
+			_ = eventWriter.WriteAudit(healthEvent(bundle, "network-connect", true, "reader-started"))
+		}
 	}
-	defer eventWriter.Close()
-
-	// Log daemon startup event.
-	_ = eventWriter.Write(Event{
-		RunID:    bundle.RunID,
-		Project:  bundle.Project.Name,
-		Backend:  "ebpf",
-		Hook:     "daemon-start",
-		Protocol: "",
-		DstIP:    "",
-		DstPort:  0,
-		Decision: "allow",
-		Reason:   "daemon-start",
-	})
 
 	if bundle.Network.Backend == "ebpf" {
 		// Start resolver/control loop.
@@ -179,13 +193,68 @@ func run() error {
 			ctx := context.Background()
 			if err := resolver.Run(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "resolver: %v\n", err)
+				_ = eventWriter.WriteAudit(auditlog.Event{EventType: auditlog.EventAuditError, RunID: bundle.RunID, Project: bundle.Project.Name, Backend: "ebpf", Component: "resolver", Error: err.Error()})
 			}
 		}()
+		_ = eventWriter.WriteAudit(healthEvent(bundle, "resolver", true, "started"))
 		fmt.Println("policy-ebpfd: resolver started")
 	}
 
+	_ = eventWriter.WriteAudit(healthEvent(bundle, "daemon", true, "daemon-ready"))
 	fmt.Println("policy-ebpfd: daemon ready")
 	return nil
+}
+
+func normalizeAuditEventConfig(bundle *PolicyBundle) {
+	if bundle.Audit.Events.HostJsonl == "" {
+		bundle.Audit.Events.HostJsonl = bundle.Events.HostJsonl
+	}
+	if bundle.Audit.Events.ProjectMirrorJsonl == "" {
+		bundle.Audit.Events.ProjectMirrorJsonl = bundle.Events.ProjectMirrorJsonl
+	}
+	if !bundle.Audit.Events.MirrorProjectEvents {
+		bundle.Audit.Events.MirrorProjectEvents = bundle.Events.MirrorProjectEvents || bundle.Audit.Commands.MirrorProjectEvents
+	}
+	if bundle.Audit.Events.Rotation.MaxBytes == 0 {
+		bundle.Audit.Events.Rotation.MaxBytes = auditlog.DefaultRotationMaxBytes
+	}
+	if bundle.Audit.Events.Rotation.MaxFiles == 0 {
+		bundle.Audit.Events.Rotation.MaxFiles = auditlog.DefaultRotationMaxFiles
+	}
+	if bundle.Audit.Commands.HostJsonl == "" {
+		bundle.Audit.Commands.HostJsonl = bundle.Audit.Events.HostJsonl
+	}
+	if bundle.Audit.Commands.ProjectMirrorJsonl == "" {
+		bundle.Audit.Commands.ProjectMirrorJsonl = bundle.Audit.Events.ProjectMirrorJsonl
+	}
+}
+
+func healthEvent(bundle *PolicyBundle, component string, active bool, message string) auditlog.Event {
+	return auditlog.Event{
+		EventType: auditlog.EventDaemonHealth,
+		RunID:     bundle.RunID,
+		Project:   bundle.Project.Name,
+		Backend:   "ebpf",
+		Component: component,
+		Status:    message,
+		Active:    &active,
+		Attached:  &active,
+		Message:   message,
+	}
+}
+
+func writeStartupHealth(bundle *PolicyBundle, component string, active bool, message string) error {
+	writer, err := NewDaemonEventWriter(
+		bundle.Audit.Events.HostJsonl,
+		bundle.Audit.Events.ProjectMirrorJsonl,
+		bundle.Audit.Events.MirrorProjectEvents,
+		bundle.Audit.Events.Rotation,
+	)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	return writer.WriteAudit(healthEvent(bundle, component, active, message))
 }
 
 func loadPolicyBundle(path string) (*PolicyBundle, error) {

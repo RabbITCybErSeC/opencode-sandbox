@@ -66,6 +66,12 @@ func Validate(cfg EffectiveConfig) error {
 			}
 		}
 	}
+	if cfg.Audit.Rotation.MaxBytes < 0 {
+		return fmt.Errorf("invalid audit.rotation.maxBytes: %d", cfg.Audit.Rotation.MaxBytes)
+	}
+	if cfg.Audit.Rotation.MaxFiles < 0 {
+		return fmt.Errorf("invalid audit.rotation.maxFiles: %d", cfg.Audit.Rotation.MaxFiles)
+	}
 	if cfg.Network.LocalhostAccess.Enabled {
 		if cfg.Network.LocalhostAccess.IP == "" {
 			return fmt.Errorf("localhostAccess.enabled requires a non-empty ip")

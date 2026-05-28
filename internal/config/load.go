@@ -239,10 +239,36 @@ func applyEBPF(base EffectiveEBPF, eb EBPF) EffectiveEBPF {
 }
 
 func applyAudit(base EffectiveAudit, audit Audit) EffectiveAudit {
+	if audit.EventLog != nil {
+		base.EventLog = *audit.EventLog
+	}
+	if audit.Rotation != nil {
+		base.Rotation = applyAuditRotation(base.Rotation, *audit.Rotation)
+	}
 	if audit.Commands != nil {
 		base.Commands = applyCommandAudit(base.Commands, *audit.Commands)
 	}
 	return base
+}
+
+func applyAuditRotation(base EffectiveAuditRotation, rotation AuditRotation) EffectiveAuditRotation {
+	if rotation.MaxBytes != nil {
+		base.MaxBytes = *rotation.MaxBytes
+	}
+	if rotation.MaxFiles != nil {
+		base.MaxFiles = *rotation.MaxFiles
+	}
+	return base
+}
+
+func AuditEventLogBase(cfg EffectiveConfig) string {
+	if cfg.Audit.EventLog != "" {
+		return cfg.Audit.EventLog
+	}
+	if cfg.Network.EBPF.EventLog != "" {
+		return cfg.Network.EBPF.EventLog
+	}
+	return cfg.Audit.Commands.EventLog
 }
 
 func applyCommandAudit(base EffectiveCommandAudit, audit CommandAudit) EffectiveCommandAudit {

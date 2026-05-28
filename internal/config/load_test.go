@@ -300,6 +300,10 @@ func TestLoadCommandAuditConfig(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	content := `version: 1
 audit:
+  eventLog: ~/.local/state/opencode-sandbox/audit
+  rotation:
+    maxBytes: 1024
+    maxFiles: 3
   commands:
     enabled: true
     backend: ebpf
@@ -327,6 +331,15 @@ audit:
 	}
 	if cfg.Audit == nil || cfg.Audit.Commands == nil {
 		t.Fatal("expected audit.commands config")
+	}
+	if cfg.Audit.EventLog == nil || *cfg.Audit.EventLog != "~/.local/state/opencode-sandbox/audit" {
+		t.Fatal("expected audit eventLog")
+	}
+	if cfg.Audit.Rotation == nil || cfg.Audit.Rotation.MaxBytes == nil || *cfg.Audit.Rotation.MaxBytes != 1024 {
+		t.Fatal("expected audit rotation maxBytes")
+	}
+	if cfg.Audit.Rotation.MaxFiles == nil || *cfg.Audit.Rotation.MaxFiles != 3 {
+		t.Fatal("expected audit rotation maxFiles")
 	}
 	if cfg.Audit.Commands.MaxArgs == nil || *cfg.Audit.Commands.MaxArgs != 32 {
 		t.Error("expected command audit maxArgs")
@@ -373,6 +386,11 @@ func TestMergeCommandAuditConfig(t *testing.T) {
 	base := Defaults()
 	overlay := File{
 		Audit: &Audit{
+			EventLog: ptr("~/.local/state/opencode-sandbox/audit"),
+			Rotation: &AuditRotation{
+				MaxBytes: ptr(int64(2048)),
+				MaxFiles: ptr(7),
+			},
 			Commands: &CommandAudit{
 				Enabled:             ptr(false),
 				FailClosed:          ptr(true),
@@ -384,6 +402,12 @@ func TestMergeCommandAuditConfig(t *testing.T) {
 	}
 
 	merged := MergeEffective(base, overlay)
+	if merged.Audit.EventLog != "~/.local/state/opencode-sandbox/audit" {
+		t.Errorf("unexpected audit eventLog: %s", merged.Audit.EventLog)
+	}
+	if merged.Audit.Rotation.MaxBytes != 2048 || merged.Audit.Rotation.MaxFiles != 7 {
+		t.Errorf("unexpected audit rotation: %+v", merged.Audit.Rotation)
+	}
 	if merged.Audit.Commands.Enabled {
 		t.Error("expected command audit enabled override false")
 	}
@@ -398,5 +422,27 @@ func TestMergeCommandAuditConfig(t *testing.T) {
 	}
 	if !merged.Audit.Commands.MirrorProjectEvents {
 		t.Error("expected command audit mirrorProjectEvents true")
+	}
+}
+
+func TestAuditEventLogBasePrecedence(t *testing.T) {
+	cfg := Defaults()
+	if got := AuditEventLogBase(cfg); got != "" {
+		t.Fatalf("expected empty default event log base, got %q", got)
+	}
+
+	cfg.Audit.Commands.EventLog = "commands"
+	if got := AuditEventLogBase(cfg); got != "commands" {
+		t.Fatalf("expected command audit fallback, got %q", got)
+	}
+
+	cfg.Network.EBPF.EventLog = "network"
+	if got := AuditEventLogBase(cfg); got != "network" {
+		t.Fatalf("expected network ebpf eventLog to win, got %q", got)
+	}
+
+	cfg.Audit.EventLog = "audit"
+	if got := AuditEventLogBase(cfg); got != "audit" {
+		t.Fatalf("expected audit eventLog to win, got %q", got)
 	}
 }

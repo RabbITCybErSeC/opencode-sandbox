@@ -77,7 +77,15 @@ type EBPF struct {
 
 // Audit holds observability and audit settings.
 type Audit struct {
-	Commands *CommandAudit `yaml:"commands,omitempty"`
+	EventLog *string        `yaml:"eventLog,omitempty"`
+	Rotation *AuditRotation `yaml:"rotation,omitempty"`
+	Commands *CommandAudit  `yaml:"commands,omitempty"`
+}
+
+// AuditRotation holds audit log rotation settings.
+type AuditRotation struct {
+	MaxBytes *int64 `yaml:"maxBytes,omitempty"`
+	MaxFiles *int   `yaml:"maxFiles,omitempty"`
 }
 
 // CommandAudit holds command execution audit settings.
@@ -184,7 +192,15 @@ type EffectiveEBPF struct {
 
 // EffectiveAudit is the resolved audit configuration.
 type EffectiveAudit struct {
+	EventLog string
+	Rotation EffectiveAuditRotation
 	Commands EffectiveCommandAudit
+}
+
+// EffectiveAuditRotation is the resolved audit log rotation configuration.
+type EffectiveAuditRotation struct {
+	MaxBytes int64
+	MaxFiles int
 }
 
 // EffectiveCommandAudit is the resolved command execution audit configuration.

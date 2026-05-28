@@ -2,12 +2,17 @@ package doctor
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
+	"github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/containercmd"
+	sandboxruntime "github.com/RabbITCybErSeC/opencode-sandbox/internal/runtime"
 )
 
 // Check describes a single doctor check result.
@@ -40,6 +45,8 @@ func Run(cfg config.EffectiveConfig) []Check {
 	checkNetworkName(&checks, cfg)
 	checkEBPFSupport(&checks, cfg)
 	checkHostDNS(&checks, cfg)
+	checkAuditConfig(&checks, cfg)
+	checkAuditLogDir(&checks, cfg)
 
 	return checks
 }
@@ -243,6 +250,80 @@ func checkEBPFSupport(checks *[]Check, cfg config.EffectiveConfig) {
 		Status:  StatusPass,
 		Message: "strict init image configured; full eBPF support requires Apple container VM with cgroup2",
 	})
+}
+
+func checkAuditConfig(checks *[]Check, cfg config.EffectiveConfig) {
+	base := config.AuditEventLogBase(cfg)
+	if base == "" {
+		base = "default state directory"
+	}
+	message := fmt.Sprintf("unified audit log writes %s with rotation maxBytes=%d maxFiles=%d", audit.DefaultFileName, cfg.Audit.Rotation.MaxBytes, cfg.Audit.Rotation.MaxFiles)
+	if cfg.Audit.Commands.Enabled {
+		message += "; command audit enabled"
+	} else {
+		message += "; command audit disabled"
+	}
+	message += fmt.Sprintf("; event log base: %s", base)
+	*checks = append(*checks, Check{
+		ID:      "audit.config",
+		Status:  StatusPass,
+		Message: message,
+	})
+}
+
+func checkAuditLogDir(checks *[]Check, cfg config.EffectiveConfig) {
+	baseDir, err := sandboxruntime.EventLogBaseDir(config.AuditEventLogBase(cfg))
+	if err != nil {
+		*checks = append(*checks, Check{ID: "audit.logs", Status: StatusFail, Message: fmt.Sprintf("cannot resolve audit log base: %v", err)})
+		return
+	}
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		*checks = append(*checks, Check{ID: "audit.logs", Status: StatusFail, Message: fmt.Sprintf("cannot create audit log base %q: %v", baseDir, err)})
+		return
+	}
+	probe := filepath.Join(baseDir, ".opencode-sandbox-doctor")
+	if err := os.WriteFile(probe, []byte("ok"), 0644); err != nil {
+		*checks = append(*checks, Check{ID: "audit.logs", Status: StatusFail, Message: fmt.Sprintf("audit log base %q is not writable: %v", baseDir, err)})
+		return
+	}
+	_ = os.Remove(probe)
+
+	latest, ok := latestAuditLog(baseDir)
+	if !ok {
+		*checks = append(*checks, Check{ID: "audit.logs", Status: StatusWarn, Message: fmt.Sprintf("audit log base %q is writable, but no latest %s was found yet", baseDir, audit.DefaultFileName)})
+		return
+	}
+	*checks = append(*checks, Check{ID: "audit.logs", Status: StatusPass, Message: fmt.Sprintf("latest audit log found at %s", latest)})
+}
+
+func latestAuditLog(baseDir string) (string, bool) {
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return "", false
+	}
+	type candidate struct {
+		path    string
+		modTime int64
+	}
+	var candidates []candidate
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(baseDir, entry.Name(), audit.DefaultFileName)
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		candidates = append(candidates, candidate{path: path, modTime: info.ModTime().UnixNano()})
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].modTime > candidates[j].modTime
+	})
+	if len(candidates) == 0 {
+		return "", false
+	}
+	return candidates[0].path, true
 }
 
 // IsHealthy returns true when no check is in fail state.

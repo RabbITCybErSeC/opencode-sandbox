@@ -186,16 +186,16 @@ network:
 
 	// Look for event log directory under ~/.local/state/opencode-sandbox/runs.
 	home, _ := os.UserHomeDir()
-	matches, err := filepath.Glob(filepath.Join(home, ".local", "state", "opencode-sandbox", "runs", "*", "network-events.jsonl"))
+	matches, err := filepath.Glob(filepath.Join(home, ".local", "state", "opencode-sandbox", "runs", "*", "audit-events.jsonl"))
 	if err != nil {
 		t.Fatalf("globbing event logs: %v", err)
 	}
 	if len(matches) == 0 {
-		t.Error("expected at least one network-events.jsonl to be created")
+		t.Error("expected at least one audit-events.jsonl to be created")
 	}
 
 	// Check project mirror if enabled.
-	projectMirror := filepath.Join(projectDir, ".opencode-sandbox", "network-events.jsonl")
+	projectMirror := filepath.Join(projectDir, ".opencode-sandbox", "audit-events.jsonl")
 	if _, err := os.Stat(projectMirror); os.IsNotExist(err) {
 		t.Log("project mirror not created (expected if container did not start successfully)")
 	}

@@ -152,19 +152,14 @@ network:
 
 ## Event Logs
 
-Strict mode writes JSONL event logs. Practical proxy mode writes proxy block logs.
+Strict mode and practical proxy mode write structured JSONL events to the unified audit log.
 
-- **Host state**: `~/.local/state/opencode-sandbox/runs/<run-id>/network-events.jsonl`
-- **Project mirror** (optional): `<project>/.opencode-sandbox/network-events.jsonl`
+- **Host state**: `~/.local/state/opencode-sandbox/runs/<run-id>/audit-events.jsonl`
+- **Project mirror** (optional): `<project>/.opencode-sandbox/audit-events.jsonl`
 
-Strict event fields include timestamp, run ID, project, backend, hook, protocol, destination IP/port, decision, reason, and matched rule when available. Events never include URLs, query strings, headers, request bodies, or secrets.
+Network event fields include schema version, event type, timestamp, run ID, project, backend, hook or method, protocol, host or destination IP/port, decision, reason, and matched rule when available. Events never include URLs, query strings, headers, request bodies, or secrets.
 
-Command audit events are opt-in while the custom init image path is experimental. When enabled, they are written beside network events.
-
-- **Host state**: `~/.local/state/opencode-sandbox/runs/<run-id>/command-events.jsonl`
-- **Project mirror** (optional): `<project>/.opencode-sandbox/command-events.jsonl`
-
-Command audit records `execve` and `execveat` process launches inside the container VM, including tools such as `curl`, `git`, `npm`, shell-spawned commands, and helper binaries. It logs full argv by default, which can include secrets passed on the command line. Shell builtins that do not spawn a process are not separate events.
+Command audit events are opt-in while the custom init image path is experimental. When enabled, they are written to the same audit log as `command.exec` events. Command audit records process launches inside the container VM, including tools such as `curl`, `git`, `npm`, shell-spawned commands, and helper binaries. It logs full argv by default, which can include secrets passed on the command line. Shell builtins that do not spawn a process are not separate events.
 
 ## Switching Backends
 
