@@ -13,6 +13,7 @@ func runHelp(args []string) error {
 	fmt.Println("  policy    Test network policy")
 	fmt.Println("  image     Pull published images or build from source")
 	fmt.Println("  config    Inspect configuration")
+	fmt.Println("  upgrade   Upgrade OpenCode in the configured runtime image")
 	fmt.Println("  uninstall Remove global artifacts and container resources")
 	fmt.Println("  help      Show this help")
 	fmt.Println()

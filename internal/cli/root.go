@@ -8,6 +8,7 @@ var wrapperCommands = map[string]bool{
 	"policy":    true,
 	"image":     true,
 	"config":    true,
+	"upgrade":   true,
 	"uninstall": true,
 	"help":      true,
 }
@@ -40,6 +41,8 @@ func Execute(args []string) error {
 			return runImage(args[1:])
 		case "config":
 			return runConfig(args[1:])
+		case "upgrade":
+			return runUpgrade(args[1:])
 		case "uninstall":
 			return runUninstall(args[1:])
 		case "help":

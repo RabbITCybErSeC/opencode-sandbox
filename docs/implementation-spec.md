@@ -187,7 +187,7 @@ opencode-sandbox . -- run "summarize this repo"
 Argument parsing rules:
 
 - Wrapper subcommands are reserved words: `doctor`, `init`, `run`, `skills`,
-  `policy`, `image`, `config`, and `help`.
+  `policy`, `image`, `config`, `upgrade`, and `help`.
 - Root-level `--help` and `-h` belong to OpenCode, not the wrapper. Wrapper help
   is available through `opencode-sandbox help` and subcommand help such as
   `opencode-sandbox help init`.
@@ -530,6 +530,27 @@ Behavior:
 - Pins OpenCode version if provided.
 - Avoids secrets at build time.
 - Emits a clear next command on success.
+
+### 7.9 `upgrade`
+
+Purpose: upgrade OpenCode in the configured runtime image without mutating an
+ephemeral running container.
+
+Command:
+
+```text
+opencode-sandbox upgrade [target]
+```
+
+Behavior:
+
+- Loads the effective image configuration for the current project.
+- Pulls the configured runtime image before rebuilding.
+- Defaults the OpenCode npm package target to `latest`.
+- Builds a temporary derived image as root with `opencode-ai@<target>`, restores
+  the unprivileged `opencode` user, and tags the result as the configured image.
+- Rejects OpenCode's `--method` flag because managed image upgrades always use
+  npm during image build.
 
 ## 8. Config Schema
 
@@ -1377,6 +1398,7 @@ available.
 - `opencode-sandbox init --global` creates global config under
   `~/.config/opencode-sandbox`.
 - `opencode-sandbox image build` builds image.
+- `opencode-sandbox upgrade [target]` upgrades OpenCode in the configured image.
 - `opencode-sandbox run .` starts OpenCode TUI.
 - `cd project && opencode-sandbox --help` runs OpenCode help in the sandbox.
 - Existing OpenCode auth works without copying the host home directory.
@@ -1646,6 +1668,7 @@ v1 is complete when:
 - `init --global` creates global config under
   `~/.config/opencode-sandbox/config.yaml`.
 - `image build` builds the OpenCode image.
+- `upgrade [target]` upgrades OpenCode in the configured image.
 - `run .` starts OpenCode in `/workspace`.
 - `opencode-sandbox --help` from a project directory runs OpenCode help in
   the sandbox.

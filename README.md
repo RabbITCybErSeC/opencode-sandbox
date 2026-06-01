@@ -20,6 +20,9 @@ sopencode init
 # Fetch the published default image
 sopencode image pull
 
+# Upgrade OpenCode in the configured runtime image
+sopencode upgrade
+
 # Run OpenCode in the sandbox
 sopencode run .
 
@@ -48,6 +51,9 @@ go build -o ./opencode-sandbox ./cmd/opencode-sandbox
 
 # Or build the image locally from source
 ./opencode-sandbox image build
+
+# Upgrade OpenCode in the configured runtime image
+./opencode-sandbox upgrade
 
 # Run OpenCode in the sandbox
 ./opencode-sandbox run .
@@ -176,6 +182,17 @@ Published images can be pulled with:
 opencode-sandbox image pull
 opencode-sandbox image pull --strict-init
 ```
+
+OpenCode itself can be upgraded without a source checkout:
+
+```bash
+opencode-sandbox upgrade
+opencode-sandbox upgrade v1.15.13
+```
+
+The wrapper pulls the configured runtime image and rebuilds a local derived
+image with the requested OpenCode npm package. It does not mutate an ephemeral
+running container.
 
 Local source builds remain supported:
 
