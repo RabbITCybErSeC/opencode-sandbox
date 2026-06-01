@@ -60,14 +60,26 @@ func TestPublishImagesWorkflowUsesSupportedPlatforms(t *testing.T) {
 	}
 }
 
+func TestStrictInitContainerfileCopiesAuditPackage(t *testing.T) {
+	containerfile := string(readRepoFile(t, "Containerfile.init"))
+	if !strings.Contains(containerfile, "COPY internal/audit ./internal/audit") {
+		t.Fatal("Containerfile.init must copy internal/audit for the policy-ebpfd build")
+	}
+}
+
 func readWorkflow(t *testing.T) []byte {
+	t.Helper()
+	return readRepoFile(t, ".github", "workflows", "images.yml")
+}
+
+func readRepoFile(t *testing.T, path ...string) []byte {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("resolve test path")
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "images.yml"))
+	data, err := os.ReadFile(filepath.Join(append([]string{root}, path...)...))
 	if err != nil {
 		t.Fatal(err)
 	}

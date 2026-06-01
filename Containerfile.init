@@ -11,6 +11,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 COPY cmd/policy-ebpfd ./cmd/policy-ebpfd
 COPY cmd/vminit-wrapper ./cmd/vminit-wrapper
+COPY internal/audit ./internal/audit
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o policy-ebpfd ./cmd/policy-ebpfd \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o vminit-wrapper ./cmd/vminit-wrapper
 
