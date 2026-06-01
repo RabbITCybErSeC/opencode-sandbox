@@ -29,6 +29,12 @@ func TestInitProjectCreatesConfig(t *testing.T) {
 	if !strings.Contains(string(data), "audit:") || !strings.Contains(string(data), "commands:") {
 		t.Error("expected command audit in generated project config")
 	}
+	if strings.Contains(string(data), "\nskills:\n") {
+		t.Error("project config should not actively override global skills settings")
+	}
+	if strings.Contains(string(data), "\n  importedDir: .opencode-sandbox/skills") {
+		t.Error("project config should not set importedDir to the project skills directory")
+	}
 }
 
 func TestInitProjectRefusesOverwrite(t *testing.T) {
@@ -54,9 +60,36 @@ func TestInitProjectForceOverwrite(t *testing.T) {
 }
 
 func TestInitGlobalCreatesConfig(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if err := initGlobal(false); err != nil {
 		t.Fatalf("initGlobal failed: %v", err)
+	}
+}
+
+func TestInitGlobalUsesLoadedGlobalConfigPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	path := filepath.Join(home, ".config", "opencode-sandbox", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := initGlobal(true); err != nil {
+		t.Fatalf("initGlobal --force failed: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "version: 1") {
+		t.Fatalf("expected global config at loaded path to be updated, got:\n%s", data)
 	}
 }
 
@@ -72,7 +105,9 @@ func TestDetectExistingConfigs(t *testing.T) {
 }
 
 func TestConfigPathGlobal(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if err := runConfigPath([]string{"--global"}); err != nil {
 		t.Fatalf("config path --global failed: %v", err)
 	}

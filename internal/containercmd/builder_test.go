@@ -307,6 +307,24 @@ func TestBuildArgvEventLogDir(t *testing.T) {
 	}
 }
 
+func TestBuildArgvMountsMergedSkillsReadOnly(t *testing.T) {
+	cfg := config.Defaults()
+	plan := Plan{
+		ProjectPath:     "/tmp/project",
+		StagingDir:      "/tmp/staging",
+		MergedSkillsDir: "/tmp/merged-skills",
+		Image:           "test:latest",
+		Effective:       cfg,
+	}
+
+	argv := BuildArgv(plan)
+	joined := strings.Join(argv, " ")
+	want := "type=bind,source=/tmp/merged-skills,target=/sandbox/home/.config/opencode/skills,readonly"
+	if !strings.Contains(joined, want) {
+		t.Fatalf("expected merged skills readonly mount %q, got:\n%s", want, joined)
+	}
+}
+
 func TestBuildArgvDurableOpenCodeStateMounts(t *testing.T) {
 	cfg := config.Defaults()
 	plan := Plan{

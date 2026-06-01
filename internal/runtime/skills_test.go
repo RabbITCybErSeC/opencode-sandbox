@@ -8,6 +8,13 @@ import (
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 )
 
+func isolateGlobalSkills(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+}
+
 func TestMergeSkills(t *testing.T) {
 	staging := t.TempDir()
 	project := t.TempDir()
@@ -95,6 +102,8 @@ func TestMergeSkillsProjectWins(t *testing.T) {
 }
 
 func TestMergeSkillsNoSkills(t *testing.T) {
+	isolateGlobalSkills(t)
+
 	staging := t.TempDir()
 	project := t.TempDir()
 
@@ -109,6 +118,8 @@ func TestMergeSkillsNoSkills(t *testing.T) {
 }
 
 func TestMergeSkillsHonorsFiltersAndImportedDir(t *testing.T) {
+	isolateGlobalSkills(t)
+
 	staging := t.TempDir()
 	project := t.TempDir()
 	imported := filepath.Join(project, "custom-skills")
@@ -139,5 +150,70 @@ func TestMergeSkillsHonorsFiltersAndImportedDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(mergedDir, "keep-secret", "SKILL.md")); !os.IsNotExist(err) {
 		t.Error("expected excluded skill to be skipped")
+	}
+}
+
+func TestMergeSkillsIncludesHomeDotConfigGlobalWithProjectImportedDir(t *testing.T) {
+	staging := t.TempDir()
+	project := t.TempDir()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	globalSkills := filepath.Join(home, ".config", "opencode-sandbox", "skills")
+	globalSkill := filepath.Join(globalSkills, "global-xdg")
+	if err := os.MkdirAll(globalSkill, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalSkill, "SKILL.md"), []byte("global"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Defaults().Skills
+	cfg.ImportedDir = ".opencode-sandbox/skills"
+
+	mergedDir, err := MergeSkills(staging, project, cfg)
+	if err != nil {
+		t.Fatalf("MergeSkills failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mergedDir, "global-xdg", "SKILL.md")); err != nil {
+		t.Error("expected ~/.config global skill to be merged")
+	}
+}
+
+func TestMergeSkillsFollowsSymlinkedGlobalSkillDir(t *testing.T) {
+	staging := t.TempDir()
+	project := t.TempDir()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	target := filepath.Join(t.TempDir(), "real-skill")
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("linked"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	globalSkills := filepath.Join(home, ".config", "opencode-sandbox", "skills")
+	if err := os.MkdirAll(globalSkills, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(globalSkills, "linked-skill")); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	mergedDir, err := MergeSkills(staging, project, config.Defaults().Skills)
+	if err != nil {
+		t.Fatalf("MergeSkills failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(mergedDir, "linked-skill", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("expected symlinked global skill to be merged: %v", err)
+	}
+	if string(data) != "linked" {
+		t.Fatalf("unexpected copied skill contents: %q", data)
 	}
 }

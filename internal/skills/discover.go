@@ -21,10 +21,10 @@ func Discover(root string) ([]SkillInfo, error) {
 	}
 	var skills []SkillInfo
 	for _, e := range entries {
-		if !e.IsDir() {
+		skillDir, ok, err := skillDirFromEntry(root, e)
+		if err != nil || !ok {
 			continue
 		}
-		skillDir := filepath.Join(root, e.Name())
 		skill, err := validateSkillDir(skillDir)
 		if err != nil {
 			continue // skip invalid
@@ -32,6 +32,28 @@ func Discover(root string) ([]SkillInfo, error) {
 		skills = append(skills, skill)
 	}
 	return skills, nil
+}
+
+func skillDirFromEntry(root string, e os.DirEntry) (string, bool, error) {
+	path := filepath.Join(root, e.Name())
+	if e.IsDir() {
+		return path, true, nil
+	}
+	info, err := e.Info()
+	if err != nil {
+		return "", false, err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return "", false, nil
+	}
+	targetInfo, err := os.Stat(path)
+	if err != nil {
+		return "", false, err
+	}
+	if !targetInfo.IsDir() {
+		return "", false, nil
+	}
+	return path, true, nil
 }
 
 func validateSkillDir(dir string) (SkillInfo, error) {
