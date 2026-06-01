@@ -29,7 +29,9 @@ func TestInitProjectExists(t *testing.T) {
 }
 
 func TestInitGlobal(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if err := initGlobal(false); err != nil {
 		t.Fatalf("initGlobal failed: %v", err)
 	}

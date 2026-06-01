@@ -187,6 +187,18 @@ sopencode image build
 sopencode image build --opencode-version <version>
 ```
 
+Upgrade OpenCode in the configured runtime image without a source checkout:
+
+```bash
+sopencode upgrade
+sopencode upgrade v1.15.13
+```
+
+With no target, `upgrade` installs the latest OpenCode npm package. The wrapper
+first pulls the configured runtime image, then rebuilds a local derived image
+with the requested OpenCode version. This keeps normal runs read-only and
+unprivileged.
+
 ## 7. Run OpenCode in a project
 
 From a project folder:

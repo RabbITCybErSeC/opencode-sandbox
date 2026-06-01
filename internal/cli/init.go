@@ -35,17 +35,16 @@ func runInit(args []string) error {
 }
 
 func initGlobal(force bool) error {
-	configDir, err := os.UserConfigDir()
+	path, err := config.GlobalConfigPath()
 	if err != nil {
 		return fmt.Errorf("getting config dir: %w", err)
 	}
-	path := configDir + "/opencode-sandbox/config.yaml"
 
 	if _, err := os.Stat(path); err == nil && !force {
 		return fmt.Errorf("global config already exists at %s; use --force to overwrite", path)
 	}
 
-	if err := os.MkdirAll(configDir+"/opencode-sandbox", 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
@@ -178,11 +177,12 @@ opencode:
   generatedConfig: true
   autoupdate: false
 
-skills:
-  importedDir: .opencode-sandbox/skills
-  include:
-    - "*"
-  exclude: []
+# Project skills are automatically discovered from .opencode-sandbox/skills/.
+# Global skills from ~/.config/opencode-sandbox/skills/ are always included.
+# skills:
+#   include:
+#     - "*"
+#   exclude: []
 
 network:
   inheritGlobal: true

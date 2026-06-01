@@ -49,7 +49,17 @@ func FindProjectConfig(startDir string) (string, error) {
 }
 
 // GlobalConfigPath returns the path to the global config file.
+// On macOS, os.UserConfigDir() returns ~/Library/Preferences, but configs
+// are typically stored at ~/.config. We check ~/.config first, then fall
+// back to os.UserConfigDir().
 func GlobalConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err == nil {
+		xdgPath := filepath.Join(home, ".config", "opencode-sandbox", "config.yaml")
+		if _, err := os.Stat(xdgPath); err == nil {
+			return xdgPath, nil
+		}
+	}
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err

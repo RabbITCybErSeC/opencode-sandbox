@@ -1,0 +1,57 @@
+version: 1
+image:
+  name: ghcr.io/rabbitcybersec/opencode-sandbox:latest
+
+project:
+  target: /workspace
+  readonly: false
+
+opencode:
+  mountHostConfig: true
+  mountHostData: true
+  generatedConfig: true
+  autoupdate: false
+
+# Project skills are automatically discovered from .opencode-sandbox/skills/.
+# Global skills from ~/.config/opencode-sandbox/skills/ are always included.
+# skills:
+#   include:
+#     - "*"
+#   exclude: []
+
+network:
+  inheritGlobal: true
+  mode: practical
+  ebpf:
+    initImage: ghcr.io/rabbitcybersec/opencode-sandbox-init:latest
+  blocklist: []
+  allowlist: []
+  # Allow the container to reach services on the macOS host (e.g., MCP servers).
+  # Requires: sudo container system dns create host.container.internal --localhost 203.0.113.113
+  localhostAccess:
+    enabled: false
+    ip: 203.0.113.113
+    domain: host.container.internal
+
+audit:
+  commands:
+    enabled: true
+    backend: ebpf
+    failClosed: false
+    logArgs: full
+    maxArgs: 64
+    maxArgBytes: 16384
+    includeExecutables: []
+    excludeExecutables: []
+    includeCwd: []
+    excludeCwd: []
+    mirrorProjectEvents: false
+    eventLog: ~/.local/state/opencode-sandbox/runs
+
+resources:
+  cpus: 4
+  memory: 4g
+
+container:
+  namePrefix: opencode-sandbox
+  remove: true

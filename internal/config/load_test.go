@@ -35,6 +35,28 @@ func TestGlobalConfigPath(t *testing.T) {
 	}
 }
 
+func TestGlobalConfigPathPrefersHomeDotConfigWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	want := filepath.Join(home, ".config", "opencode-sandbox", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(want), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(want, []byte("version: 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GlobalConfigPath()
+	if err != nil {
+		t.Fatalf("GlobalConfigPath failed: %v", err)
+	}
+	if got != want {
+		t.Fatalf("GlobalConfigPath() = %q, want %q", got, want)
+	}
+}
+
 func TestLoadValid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

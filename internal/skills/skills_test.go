@@ -55,7 +55,6 @@ func TestImportSingle(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: imported\n---\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-
 	dst := t.TempDir()
 	opts := ImportOptions{
 		Source:  src,
@@ -79,6 +78,33 @@ func TestImportSingle(t *testing.T) {
 	copied := filepath.Join(dst, "imported", "SKILL.md")
 	if _, err := os.Stat(copied); err != nil {
 		t.Errorf("expected copied skill at %s: %v", copied, err)
+	}
+}
+
+func TestImportSymlinkedSkillFromParent(t *testing.T) {
+	parent := t.TempDir()
+	target := filepath.Join(t.TempDir(), "real-skill")
+	dst := t.TempDir()
+
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("# linked import"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(parent, "linked-import")); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	results, err := Import(ImportOptions{Source: parent, DestDir: dst, Scope: "global"})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 imported skill, got %d", len(results))
+	}
+	if _, err := os.Stat(filepath.Join(dst, "linked-import", "SKILL.md")); err != nil {
+		t.Fatalf("expected copied linked skill: %v", err)
 	}
 }
 

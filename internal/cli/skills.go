@@ -78,6 +78,15 @@ func runSkillsImport(args []string) error {
 			return fmt.Errorf("getting config dir: %w", err)
 		}
 		destDir = filepath.Join(configDir, "opencode-sandbox", "skills")
+		// On macOS, os.UserConfigDir() returns ~/Library/Preferences,
+		// but skills should be installed at ~/.config/opencode-sandbox/skills.
+		home, err := os.UserHomeDir()
+		if err == nil {
+			xdgDir := filepath.Join(home, ".config", "opencode-sandbox", "skills")
+			if _, err := os.Stat(xdgDir); err == nil || xdgDir != destDir {
+				destDir = xdgDir
+			}
+		}
 	case "project":
 		if project == "" {
 			wd, err := os.Getwd()
@@ -182,20 +191,20 @@ func collectSkillsList(project string) ([]skillListItem, error) {
 	// On macOS, os.UserConfigDir() returns ~/Library/Preferences,
 	// but skills may be installed at ~/.config/opencode-sandbox/skills.
 	// Check both locations.
-	home, _ := os.UserHomeDir()
-	xdgConfigDir := filepath.Join(home, ".config")
-
 	roots := []struct {
 		scope string
 		path  string
 	}{
 		{"global-imported", filepath.Join(configDir, "opencode-sandbox", "skills")},
 	}
-	if xdgConfigDir != configDir {
-		roots = append(roots, struct {
-			scope string
-			path  string
-		}{"global-xdg", filepath.Join(xdgConfigDir, "opencode-sandbox", "skills")})
+	if home, err := os.UserHomeDir(); err == nil {
+		xdgConfigDir := filepath.Join(home, ".config")
+		if xdgConfigDir != configDir {
+			roots = append(roots, struct {
+				scope string
+				path  string
+			}{"global-xdg", filepath.Join(xdgConfigDir, "opencode-sandbox", "skills")})
+		}
 	}
 	roots = append(roots, []struct {
 		scope string

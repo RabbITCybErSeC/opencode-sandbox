@@ -39,10 +39,10 @@ func Import(opts ImportOptions) ([]ManifestEntry, error) {
 				return nil, fmt.Errorf("reading source dir: %w", err)
 			}
 			for _, e := range entries {
-				if !e.IsDir() {
+				skillDir, ok, err := skillDirFromEntry(opts.Source, e)
+				if err != nil || !ok {
 					continue
 				}
-				skillDir := filepath.Join(opts.Source, e.Name())
 				if hasSkillMd(skillDir) {
 					sources = append(sources, skillDir)
 				}
@@ -105,17 +105,21 @@ func importSingle(src string, opts ImportOptions) (ManifestEntry, error) {
 	}
 
 	dest := filepath.Join(opts.DestDir, name)
+	copySource, err := resolveSkillSource(src)
+	if err != nil {
+		return ManifestEntry{}, err
+	}
 
 	if !opts.DryRun {
 		if err := os.MkdirAll(dest, 0755); err != nil {
 			return ManifestEntry{}, fmt.Errorf("creating dest dir: %w", err)
 		}
-		if err := copySkillDir(src, dest); err != nil {
+		if err := copySkillDir(copySource, dest); err != nil {
 			return ManifestEntry{}, fmt.Errorf("copying skill: %w", err)
 		}
 	}
 
-	hash, err := hashSkillDir(src)
+	hash, err := hashSkillDir(copySource)
 	if err != nil {
 		return ManifestEntry{}, fmt.Errorf("hashing skill: %w", err)
 	}
@@ -139,6 +143,28 @@ func isSecurityError(err error) bool {
 func hasSkillMd(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "SKILL.md"))
 	return err == nil
+}
+
+func resolveSkillSource(dir string) (string, error) {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return dir, nil
+	}
+	target, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	targetInfo, err := os.Stat(target)
+	if err != nil {
+		return "", err
+	}
+	if !targetInfo.IsDir() {
+		return "", fmt.Errorf("skill source symlink is not a directory: %s", dir)
+	}
+	return target, nil
 }
 
 func matchesFilters(name string, include, exclude []string) bool {

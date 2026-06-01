@@ -131,6 +131,22 @@ Encrypted DNS (DoH/DNS-over-TLS) can bypass the local DNS resolver.
 
 Project config is discovered by walking up from the project path. Global config lives at `~/.config/opencode-sandbox/config.yaml`.
 
+### OpenCode upgrade fails inside the container
+
+Do not forward OpenCode's npm self-update into a running sandbox. The runtime
+image installs OpenCode globally as root, while normal runs use an unprivileged
+user and an ephemeral read-only container filesystem.
+
+Use the wrapper-managed upgrade command instead:
+
+```bash
+opencode-sandbox upgrade
+opencode-sandbox upgrade v1.15.13
+```
+
+This pulls the configured runtime image and builds a local derived image with
+the requested OpenCode package version.
+
 ### Image build fails
 
 For normal installs, prefer pulling the published image:
