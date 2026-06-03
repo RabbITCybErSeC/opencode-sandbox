@@ -9,7 +9,7 @@ project:
 opencode:
   mountHostConfig: true
   mountHostData: true
-  generatedConfig: true
+  generatedConfig: false
   autoupdate: false
 
 # Project skills are automatically discovered from .opencode-sandbox/skills/.

@@ -350,6 +350,63 @@ func TestBuildArgvDurableOpenCodeStateMounts(t *testing.T) {
 	}
 }
 
+func TestBuildArgvUsesTmpfsOpenCodeStateWhenHostDataDisabled(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.OpenCode.MountHostData = false
+	plan := Plan{
+		ProjectPath:       "/tmp/project",
+		StagingDir:        "/tmp/staging",
+		OpenCodeConfigDir: "/tmp/soc/config/opencode",
+		OpenCodeDataDir:   "/tmp/soc/data/opencode",
+		OpenCodeStateDir:  "/tmp/soc/state/opencode",
+		Image:             "test:latest",
+		Effective:         cfg,
+	}
+
+	argv := BuildArgv(plan)
+	joined := strings.Join(argv, " ")
+	for _, notWant := range []string{
+		"type=bind,source=/tmp/soc/data/opencode,target=/sandbox/home/.local/share/opencode",
+		"type=bind,source=/tmp/soc/state/opencode,target=/sandbox/home/.local/state/opencode",
+		"type=bind,source=/tmp/soc/config/opencode,target=/sandbox/home/.config/opencode",
+	} {
+		if strings.Contains(joined, notWant) {
+			t.Fatalf("expected argv not to contain %q, got:\n%s", notWant, joined)
+		}
+	}
+	for _, want := range []string{
+		"--tmpfs /tmp/opencode-home",
+		"type=bind,source=/tmp/soc/config/opencode,target=/tmp/opencode-home/.config/opencode",
+		"HOME=/tmp/opencode-home",
+		"XDG_CONFIG_HOME=/tmp/opencode-home/.config",
+		"XDG_DATA_HOME=/tmp/opencode-home/.local/share",
+		"XDG_STATE_HOME=/tmp/opencode-home/.local/state",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected argv to contain %q, got:\n%s", want, joined)
+		}
+	}
+}
+
+func TestBuildArgvMountsMergedSkillsUnderTmpfsHomeWhenHostDataDisabled(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.OpenCode.MountHostData = false
+	plan := Plan{
+		ProjectPath:     "/tmp/project",
+		StagingDir:      "/tmp/staging",
+		MergedSkillsDir: "/tmp/merged-skills",
+		Image:           "test:latest",
+		Effective:       cfg,
+	}
+
+	argv := BuildArgv(plan)
+	joined := strings.Join(argv, " ")
+	want := "type=bind,source=/tmp/merged-skills,target=/tmp/opencode-home/.config/opencode/skills,readonly"
+	if !strings.Contains(joined, want) {
+		t.Fatalf("expected merged skills readonly mount %q, got:\n%s", want, joined)
+	}
+}
+
 func TestBuildArgvExtraMounts(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Project.ExtraMounts = []string{"/tmp/cache:/cache:ro"}

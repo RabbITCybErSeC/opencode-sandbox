@@ -26,6 +26,11 @@ type Plan struct {
 func BuildArgv(plan Plan) []string {
 	cfg := plan.Effective
 	argv := []string{"container", "run"}
+	sandboxHome := sandboxHomeDir(cfg)
+	sandboxConfigHome := sandboxHome + "/.config"
+	sandboxOpenCodeConfigDir := sandboxConfigHome + "/opencode"
+	sandboxOpenCodeDataDir := sandboxHome + "/.local/share/opencode"
+	sandboxOpenCodeStateDir := sandboxHome + "/.local/state/opencode"
 
 	if cfg.Container.Remove {
 		argv = append(argv, "--rm")
@@ -57,18 +62,18 @@ func BuildArgv(plan Plan) []string {
 	argv = append(argv, mountArg(plan.StagingDir, "/sandbox", false)...)
 
 	if plan.OpenCodeConfigDir != "" {
-		argv = append(argv, mountArg(plan.OpenCodeConfigDir, "/sandbox/home/.config/opencode", false)...)
+		argv = append(argv, mountArg(plan.OpenCodeConfigDir, sandboxOpenCodeConfigDir, false)...)
 	}
 	if cfg.OpenCode.MountHostData && plan.OpenCodeDataDir != "" {
-		argv = append(argv, mountArg(plan.OpenCodeDataDir, "/sandbox/home/.local/share/opencode", false)...)
+		argv = append(argv, mountArg(plan.OpenCodeDataDir, sandboxOpenCodeDataDir, false)...)
 	}
 	if cfg.OpenCode.MountHostData && plan.OpenCodeStateDir != "" {
-		argv = append(argv, mountArg(plan.OpenCodeStateDir, "/sandbox/home/.local/state/opencode", false)...)
+		argv = append(argv, mountArg(plan.OpenCodeStateDir, sandboxOpenCodeStateDir, false)...)
 	}
 
 	// Merged imported skills mount (read-only)
 	if plan.MergedSkillsDir != "" {
-		argv = append(argv, mountArg(plan.MergedSkillsDir, "/sandbox/home/.config/opencode/skills", true)...)
+		argv = append(argv, mountArg(plan.MergedSkillsDir, sandboxOpenCodeConfigDir+"/skills", true)...)
 	}
 
 	// Event log mount (durable host state, overrides staging logs subdir)
@@ -79,11 +84,15 @@ func BuildArgv(plan Plan) []string {
 	// tmpfs mounts
 	argv = append(argv, "--tmpfs", "/tmp")
 	argv = append(argv, "--tmpfs", "/run")
+	if !cfg.OpenCode.MountHostData {
+		argv = append(argv, "--tmpfs", sandboxHome)
+	}
 
 	// Environment variables
-	argv = append(argv, "--env", "HOME=/sandbox/home")
-	argv = append(argv, "--env", "XDG_CONFIG_HOME=/sandbox/home/.config")
-	argv = append(argv, "--env", "XDG_DATA_HOME=/sandbox/home/.local/share")
+	argv = append(argv, "--env", "HOME="+sandboxHome)
+	argv = append(argv, "--env", "XDG_CONFIG_HOME="+sandboxConfigHome)
+	argv = append(argv, "--env", "XDG_DATA_HOME="+sandboxHome+"/.local/share")
+	argv = append(argv, "--env", "XDG_STATE_HOME="+sandboxHome+"/.local/state")
 	argv = append(argv, "--env", fmt.Sprintf("OPENCODE_SANDBOX_NETWORK_MODE=%s", cfg.Network.Mode))
 	argv = append(argv, "--env", fmt.Sprintf("OPENCODE_SANDBOX_NETWORK_BACKEND=%s", cfg.Network.Backend))
 	argv = append(argv, "--env", "OPENCODE_SANDBOX_POLICY_FILE=/sandbox/policy.json")
@@ -131,6 +140,13 @@ func BuildArgv(plan Plan) []string {
 	argv = append(argv, plan.OpenCodeArgs...)
 
 	return argv
+}
+
+func sandboxHomeDir(cfg config.EffectiveConfig) string {
+	if cfg.OpenCode.MountHostData {
+		return "/sandbox/home"
+	}
+	return "/tmp/opencode-home"
 }
 
 // RequiredInitImage returns the init image needed by the selected runtime
