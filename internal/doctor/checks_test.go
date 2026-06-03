@@ -9,6 +9,7 @@ import (
 
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/audit"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
+	sandboxruntime "github.com/RabbITCybErSeC/opencode-sandbox/internal/runtime"
 )
 
 func TestRunWithDefaults(t *testing.T) {
@@ -110,6 +111,41 @@ func TestRunReportsLatestAuditLog(t *testing.T) {
 	check := findCheck(t, checks, "audit.logs")
 	if check.Status != StatusPass {
 		t.Fatalf("expected pass for existing audit log, got %+v", check)
+	}
+}
+
+func TestRunReportsOpenCodeStateWarningWithoutMutation(t *testing.T) {
+	withImageInspect(t, nil)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	paths, err := sandboxruntime.ResolveOpenCodeStatePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataDir := paths.DataDir
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	authPath := filepath.Join(dataDir, "auth.json")
+	if err := os.WriteFile(authPath, []byte("   "), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Defaults()
+	cfg.Audit.EventLog = t.TempDir()
+	checks := Run(cfg)
+	check := findCheck(t, checks, "opencode.state")
+	if check.Status != StatusWarn {
+		t.Fatalf("expected warn for malformed auth, got %+v", check)
+	}
+	data, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "   " {
+		t.Fatalf("doctor should not mutate auth.json, got %q", data)
 	}
 }
 

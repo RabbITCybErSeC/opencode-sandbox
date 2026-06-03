@@ -9,6 +9,7 @@ import (
 
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/containercmd"
+	"github.com/RabbITCybErSeC/opencode-sandbox/internal/runtime"
 )
 
 func TestExecute(t *testing.T) {
@@ -170,6 +171,45 @@ func TestBuildRunContainerPlanDryRunDoesNotMaterialize(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, ".opencode-sandbox")); !os.IsNotExist(err) {
 		t.Fatalf("dry-run should not create project state, stat err=%v", err)
+	}
+}
+
+func TestRunReportsOpenCodeStartupDiagnosis(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	oldRunContainer := runContainer
+	oldInspectRunImage := inspectRunImage
+	defer func() {
+		runContainer = oldRunContainer
+		inspectRunImage = oldInspectRunImage
+	}()
+	inspectRunImage = func(image string) ([]byte, error) {
+		return nil, nil
+	}
+	runContainer = func(args []string) error {
+		paths, err := runtime.ResolveOpenCodeStatePaths()
+		if err != nil {
+			return err
+		}
+		logDir := filepath.Join(paths.DataDir, "log")
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return err
+		}
+		log := "ERROR service=server error=database disk image is malformed\nAffected startup requests: config.providers, provider.list\n"
+		if err := os.WriteFile(filepath.Join(logDir, "2026-06-03T060144.log"), []byte(log), 0644); err != nil {
+			return err
+		}
+		return errors.New("exit status 1")
+	}
+
+	err := Execute([]string{"run", t.TempDir()})
+	if err == nil {
+		t.Fatal("expected run error")
+	}
+	if !strings.Contains(err.Error(), "SQLite database") || !strings.Contains(err.Error(), "config.providers") {
+		t.Fatalf("expected startup diagnosis, got %v", err)
 	}
 }
 

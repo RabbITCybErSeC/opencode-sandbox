@@ -47,6 +47,7 @@ func Run(cfg config.EffectiveConfig) []Check {
 	checkHostDNS(&checks, cfg)
 	checkAuditConfig(&checks, cfg)
 	checkAuditLogDir(&checks, cfg)
+	checkOpenCodeState(&checks)
 
 	return checks
 }
@@ -294,6 +295,28 @@ func checkAuditLogDir(checks *[]Check, cfg config.EffectiveConfig) {
 		return
 	}
 	*checks = append(*checks, Check{ID: "audit.logs", Status: StatusPass, Message: fmt.Sprintf("latest audit log found at %s", latest)})
+}
+
+func checkOpenCodeState(checks *[]Check) {
+	paths, err := sandboxruntime.ResolveOpenCodeStatePaths()
+	if err != nil {
+		*checks = append(*checks, Check{ID: "opencode.state", Status: StatusWarn, Message: fmt.Sprintf("cannot resolve managed OpenCode state paths: %v", err)})
+		return
+	}
+	report := sandboxruntime.CheckOpenCodeState(paths)
+	if report.Auth.Status == sandboxruntime.OpenCodeStateStatusWarn || report.Database.Status == sandboxruntime.OpenCodeStateStatusWarn {
+		*checks = append(*checks, Check{
+			ID:      "opencode.state",
+			Status:  StatusWarn,
+			Message: fmt.Sprintf("%s; %s", report.Auth.Message, report.Database.Message),
+		})
+		return
+	}
+	*checks = append(*checks, Check{
+		ID:      "opencode.state",
+		Status:  StatusPass,
+		Message: fmt.Sprintf("%s; %s", report.Auth.Message, report.Database.Message),
+	})
 }
 
 func latestAuditLog(baseDir string) (string, bool) {
