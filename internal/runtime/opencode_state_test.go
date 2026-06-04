@@ -112,12 +112,41 @@ func TestDiagnoseOpenCodeStartupLogsSummarizesMalformedDB(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msg, ok := DiagnoseOpenCodeStartupLogs(paths)
+	msg, ok := DiagnoseOpenCodeStartupLogs(paths, time.Time{})
 	if !ok {
 		t.Fatal("expected diagnosis")
 	}
 	if !strings.Contains(msg, "SQLite database") || !strings.Contains(msg, "config.providers") {
 		t.Fatalf("unexpected diagnosis: %s", msg)
+	}
+}
+
+func TestDiagnoseOpenCodeStartupLogsIgnoresStaleLogs(t *testing.T) {
+	paths := testStatePaths(t)
+	logDir := filepath.Join(paths.DataDir, "log")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	stalePath := filepath.Join(logDir, "2026-06-03T060144.log")
+	staleLog := "ERROR service=server error=database disk image is malformed\nAffected startup requests: config.providers, provider.list\n"
+	if err := os.WriteFile(stalePath, []byte(staleLog), 0644); err != nil {
+		t.Fatal(err)
+	}
+	since := time.Date(2026, 6, 4, 16, 36, 30, 0, time.UTC)
+	if err := os.Chtimes(stalePath, since.Add(-time.Minute), since.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	freshPath := filepath.Join(logDir, "2026-06-04T163631.log")
+	freshLog := "INFO service=server startup complete\n"
+	if err := os.WriteFile(freshPath, []byte(freshLog), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(freshPath, since.Add(time.Second), since.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	if msg, ok := DiagnoseOpenCodeStartupLogs(paths, since); ok {
+		t.Fatalf("expected stale log to be ignored, got diagnosis: %s", msg)
 	}
 }
 
