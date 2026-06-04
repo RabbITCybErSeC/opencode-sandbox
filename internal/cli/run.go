@@ -84,12 +84,16 @@ func runRun(args []string) error {
 		DataDir:   containerPlan.OpenCodeDataDir,
 		StateDir:  containerPlan.OpenCodeStateDir,
 	}
-	if err := runtime.MaintainOpenCodeState(statePaths); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: OpenCode state maintenance failed: %v\n", err)
+	if runtime.UsesDurableOpenCodeData(containerPlan.Effective) {
+		if err := runtime.MaintainOpenCodeState(statePaths); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: OpenCode state maintenance failed: %v\n", err)
+		}
 	}
 	if runErr != nil {
-		if diagnosis, ok := runtime.DiagnoseOpenCodeStartupLogs(statePaths); ok {
-			return fmt.Errorf("running container: %w\n%s", runErr, diagnosis)
+		if runtime.UsesDurableOpenCodeData(containerPlan.Effective) {
+			if diagnosis, ok := runtime.DiagnoseOpenCodeStartupLogs(statePaths); ok {
+				return fmt.Errorf("running container: %w\n%s", runErr, diagnosis)
+			}
 		}
 		return fmt.Errorf("running container: %w", runErr)
 	}
@@ -160,12 +164,14 @@ func buildRunContainerPlan(plan RunPlan, opts effectiveRunOptions) (containercmd
 		if err != nil {
 			return containercmd.Plan{}, cleanup, fmt.Errorf("preparing opencode state: %w", err)
 		}
-		stateReport, err := runtime.RepairOpenCodeState(statePaths)
-		if err != nil {
-			return containercmd.Plan{}, cleanup, fmt.Errorf("repairing opencode state: %w", err)
-		}
-		for _, msg := range stateReport.RepairMessages() {
-			fmt.Fprintln(os.Stderr, msg)
+		if runtime.UsesDurableOpenCodeData(effective) {
+			stateReport, err := runtime.RepairOpenCodeState(statePaths)
+			if err != nil {
+				return containercmd.Plan{}, cleanup, fmt.Errorf("repairing opencode state: %w", err)
+			}
+			for _, msg := range stateReport.RepairMessages() {
+				fmt.Fprintln(os.Stderr, msg)
+			}
 		}
 
 		if err := runtime.GeneratePolicyBundle(stagingDir, runID, projectPath, projectName, effective); err != nil {

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 )
 
 const (
@@ -36,6 +38,11 @@ var (
 	openCodeStateNow = time.Now
 	runSQLitePragma  = defaultRunSQLitePragma
 )
+
+// UsesDurableOpenCodeData reports whether a run mounts persistent OpenCode data.
+func UsesDurableOpenCodeData(cfg config.EffectiveConfig) bool {
+	return cfg.OpenCode.MountHostData
+}
 
 // CheckOpenCodeState validates wrapper-managed OpenCode state without mutating it.
 func CheckOpenCodeState(paths OpenCodeStatePaths) OpenCodeStateReport {

@@ -213,6 +213,47 @@ func TestRunReportsOpenCodeStartupDiagnosis(t *testing.T) {
 	}
 }
 
+func TestBuildRunContainerPlanDoesNotRepairDurableStateWhenHostDataDisabled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	project := t.TempDir()
+	configPath := filepath.Join(project, ".opencode-sandbox.yaml")
+	configYAML := "version: 1\nopencode:\n  mountHostData: false\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths, err := runtime.ResolveOpenCodeStatePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.DataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	authPath := filepath.Join(paths.DataDir, "auth.json")
+	if err := os.WriteFile(authPath, []byte("   "), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, cleanup, err := buildRunContainerPlan(RunPlan{ProjectPath: project}, effectiveRunOptions{Materialize: true})
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatalf("buildRunContainerPlan failed: %v", err)
+	}
+
+	data, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "   " {
+		t.Fatalf("expected durable auth state to remain untouched, got %q", data)
+	}
+}
+
 func TestIsWrapperCommand(t *testing.T) {
 	for cmd := range wrapperCommands {
 		if !isWrapperCommand(cmd) {

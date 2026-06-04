@@ -47,7 +47,7 @@ func Run(cfg config.EffectiveConfig) []Check {
 	checkHostDNS(&checks, cfg)
 	checkAuditConfig(&checks, cfg)
 	checkAuditLogDir(&checks, cfg)
-	checkOpenCodeState(&checks)
+	checkOpenCodeState(&checks, cfg)
 
 	return checks
 }
@@ -297,7 +297,15 @@ func checkAuditLogDir(checks *[]Check, cfg config.EffectiveConfig) {
 	*checks = append(*checks, Check{ID: "audit.logs", Status: StatusPass, Message: fmt.Sprintf("latest audit log found at %s", latest)})
 }
 
-func checkOpenCodeState(checks *[]Check) {
+func checkOpenCodeState(checks *[]Check, cfg config.EffectiveConfig) {
+	if !sandboxruntime.UsesDurableOpenCodeData(cfg) {
+		*checks = append(*checks, Check{
+			ID:      "opencode.state",
+			Status:  StatusSkip,
+			Message: "opencode.mountHostData is disabled; sandboxed OpenCode data lives on tmpfs for each run",
+		})
+		return
+	}
 	paths, err := sandboxruntime.ResolveOpenCodeStatePaths()
 	if err != nil {
 		*checks = append(*checks, Check{ID: "opencode.state", Status: StatusWarn, Message: fmt.Sprintf("cannot resolve managed OpenCode state paths: %v", err)})

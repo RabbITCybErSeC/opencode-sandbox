@@ -149,6 +149,19 @@ func TestRunReportsOpenCodeStateWarningWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestRunSkipsOpenCodeStateWhenHostDataDisabled(t *testing.T) {
+	withImageInspect(t, nil)
+	cfg := config.Defaults()
+	cfg.OpenCode.MountHostData = false
+	cfg.Audit.EventLog = t.TempDir()
+
+	checks := Run(cfg)
+	check := findCheck(t, checks, "opencode.state")
+	if check.Status != StatusSkip {
+		t.Fatalf("expected skip when host data disabled, got %+v", check)
+	}
+}
+
 func TestRunWithEBPFMissingNetworkName(t *testing.T) {
 	withImageInspect(t, nil)
 	cfg := config.Defaults()
