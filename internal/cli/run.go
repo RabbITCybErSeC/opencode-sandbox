@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/config"
 	"github.com/RabbITCybErSeC/opencode-sandbox/internal/containercmd"
@@ -78,6 +79,7 @@ func runRun(args []string) error {
 		return err
 	}
 
+	runStartedAt := time.Now()
 	runErr := runContainer(argv)
 	statePaths := runtime.OpenCodeStatePaths{
 		ConfigDir: containerPlan.OpenCodeConfigDir,
@@ -91,7 +93,7 @@ func runRun(args []string) error {
 	}
 	if runErr != nil {
 		if runtime.UsesDurableOpenCodeData(containerPlan.Effective) {
-			if diagnosis, ok := runtime.DiagnoseOpenCodeStartupLogs(statePaths); ok {
+			if diagnosis, ok := runtime.DiagnoseOpenCodeStartupLogs(statePaths, runStartedAt); ok {
 				return fmt.Errorf("running container: %w\n%s", runErr, diagnosis)
 			}
 		}

@@ -107,8 +107,9 @@ func (r OpenCodeStateReport) RepairMessages() []string {
 }
 
 // DiagnoseOpenCodeStartupLogs summarizes known opaque OpenCode startup failures.
-func DiagnoseOpenCodeStartupLogs(paths OpenCodeStatePaths) (string, bool) {
-	logPath, ok := latestOpenCodeLog(filepath.Join(paths.DataDir, "log"))
+// Only logs written at or after since are considered relevant to the current run.
+func DiagnoseOpenCodeStartupLogs(paths OpenCodeStatePaths, since time.Time) (string, bool) {
+	logPath, ok := latestOpenCodeLog(filepath.Join(paths.DataDir, "log"), since)
 	if !ok {
 		return "", false
 	}
@@ -240,7 +241,7 @@ func timestamp() string {
 	return openCodeStateNow().UTC().Format("20060102-150405")
 }
 
-func latestOpenCodeLog(logDir string) (string, bool) {
+func latestOpenCodeLog(logDir string, since time.Time) (string, bool) {
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
 		return "", false
@@ -257,6 +258,9 @@ func latestOpenCodeLog(logDir string) (string, bool) {
 		path := filepath.Join(logDir, entry.Name())
 		info, err := os.Stat(path)
 		if err != nil {
+			continue
+		}
+		if !since.IsZero() && info.ModTime().Before(since) {
 			continue
 		}
 		candidates = append(candidates, candidate{path: path, modTime: info.ModTime().UnixNano()})
